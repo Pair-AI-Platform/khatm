@@ -49,9 +49,22 @@ jobs:
         with:
           persist-credentials: false
 
+      # The release creates the git tag on the commit the packages were built from. When main has
+      # moved on and its workflow files differ from that commit, GitHub treats the new tag as a
+      # workflow change, which GITHUB_TOKEN may never make (HTTP 403). The repository's GitHub App
+      # has the workflows permission, so its short-lived token is used instead.
+      - name: App Token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.RENOVATE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-workflows: write
+
       - name: GitHub Release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/openssl-provider-fips"
           {
@@ -87,6 +100,8 @@ jobs:
   # Never fails the release.
   cleanup:
     needs: [build, release]
+    # Runs after a failed release step too: the versions in GHCR are complete either way
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     continue-on-error: true
@@ -106,9 +121,19 @@ jobs:
           delete-partial-images: true
           validate: true
 
+      # Deleting an old tag counts as a workflow change too when its workflow files differ from main
+      - name: App Token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.RENOVATE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-workflows: write
+
       - name: Keep the Five Newest GitHub Releases
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           gh release list --limit 200 --json tagName,createdAt \
