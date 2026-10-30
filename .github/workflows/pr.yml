@@ -15,9 +15,15 @@ concurrency:
 permissions: {}
 
 jobs:
+  # build.yml also holds the publish job, and GitHub refuses to start a called workflow whose jobs
+  # declare more permissions than the caller grants, even for jobs that are skipped. publish: false
+  # skips that job, so nothing here is pushed, signed or attested.
   build:
     permissions:
       contents: read
+      packages: write
+      id-token: write
+      attestations: write
     uses: ./.github/workflows/build.yml
     with:
       publish: false
