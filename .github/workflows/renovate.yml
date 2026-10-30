@@ -37,29 +37,36 @@ jobs:
         with:
           persist-credentials: false
 
-      # RENOVATE_TOKEN must be a fine-grained token on this repository with Contents, Pull requests,
-      # Issues and Workflows: read/write (and Dependabot alerts: read). With GITHUB_TOKEN, Renovate
-      # cannot update workflow files, its pull requests start no checks (so nothing automerges) and
-      # its merges start no release.
-      - name: Check Token
-        env:
-          HAS_TOKEN: ${{ secrets.RENOVATE_TOKEN != '' }}
-        run: |
-          if [ "$HAS_TOKEN" != true ]; then
-            echo "::error::The RENOVATE_TOKEN secret is not set"
-            exit 1
-          fi
+      # Renovate acts as the GitHub App renovate(bot)-updater, installed on this repository. Its
+      # short-lived installation token, unlike GITHUB_TOKEN, can update workflow files, and its pull
+      # requests and merges start the checks (so updates automerge) and the release.
+      # vars.RENOVATE_APP_CLIENT_ID: the App's client ID; secrets.RENOVATE_APP_PRIVATE_KEY: its .pem.
+      - name: App Token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.RENOVATE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+          permission-workflows: write
+          permission-checks: read
+          permission-statuses: read
+          permission-vulnerability-alerts: read
 
       - name: Renovate
         uses: renovatebot/github-action@43b963bf5dd5e57f1f95c59765a018d782870211 # v46.3.11
         with:
           configurationFile: renovate.json
-          token: ${{ secrets.RENOVATE_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
         env:
           RENOVATE_REPOSITORIES: ${{ github.repository }}
           RENOVATE_AUTODISCOVER: 'false'
           RENOVATE_ONBOARDING: 'false'
           RENOVATE_REQUIRE_CONFIG: 'optional'
+          # Commits are authored by the App's bot user
+          RENOVATE_GIT_AUTHOR: 'renovate-bot-updater[bot] <350416368+renovate-bot-updater[bot]@users.noreply.github.com>'
           # The only command a pull request may run: the epoch bump and CHANGELOG entry
           RENOVATE_ALLOWED_COMMANDS: '["^bash scripts/bump-epoch\\.sh$"]'
           LOG_LEVEL: ${{ inputs.logLevel || 'info' }}
