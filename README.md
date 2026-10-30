@@ -47,7 +47,7 @@ are signed with.
 
 ```sh
 oras pull ghcr.io/pair-ai-platform/openssl-provider-fips:latest --platform linux/amd64 -o fips
-# fips/melange-x86_64.rsa.pub  fips/x86_64/APKINDEX.tar.gz  fips/x86_64/*.apk
+# fips/khatm.rsa.pub  fips/x86_64/APKINDEX.tar.gz  fips/x86_64/*.apk
 
 cp fips/*.rsa.pub /etc/apk/keys/
 apk add --repository "$PWD/fips" openssl openssl-config-fipshardened
@@ -83,7 +83,7 @@ RUN cp /tmp/fips/*.rsa.pub /etc/apk/keys/ && \
 ```
 
 With apko, pull the artifact first and add it as a build repository:
-`apko build ... -b ./fips -k ./fips/melange-x86_64.rsa.pub`.
+`apko build ... -b ./fips -k ./fips/khatm.rsa.pub`.
 
 ---
 
@@ -124,11 +124,15 @@ gh attestation verify fips/x86_64/openssl-provider-fips-3.1.2-3.1.2-r0.apk \
 oras discover --format tree "$IMAGE"
 ```
 
-There is no long-lived signing key. The artifact is signed keyless: Sigstore Fulcio issues a
-short-lived certificate to the build workflow's GitHub OIDC identity. APK files still need an RSA
-signature, so each build signs them with a throwaway key. Its public half ships inside the
-artifact, and the keyless signature covers it. To use one fixed APK key instead, set the
-`MELANGE_SIGNING_KEY` secret (an RSA private key in PEM format).
+The artifact is signed keyless: Sigstore Fulcio issues a short-lived certificate to the build
+workflow's GitHub OIDC identity. The APK files themselves are signed with one fixed RSA key, whose
+public half is [keys/khatm.rsa.pub](keys/khatm.rsa.pub) in this repository and also ships inside
+every artifact. Check that the two match before trusting a download:
+
+```sh
+curl -fsSLO https://raw.githubusercontent.com/Pair-AI-Platform/khatm/main/keys/khatm.rsa.pub
+cmp khatm.rsa.pub fips/khatm.rsa.pub
+```
 
 ---
 
