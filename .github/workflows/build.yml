@@ -79,7 +79,7 @@ jobs:
         run: |
           mkdir -p .keys
           if [ -n "$SIGNING_KEY" ]; then
-            name=taha2samy-3-fips.rsa
+            name=khatm.rsa
             (umask 077; printf '%s\n' "$SIGNING_KEY" > ".keys/$name")
             openssl pkey -in ".keys/$name" -pubout -out ".keys/$name.pub"
           else
@@ -95,7 +95,7 @@ jobs:
             --source-dir "$SOURCE_DIR" \
             --signing-key ".keys/$KEY_NAME" \
             --out-dir packages \
-            --namespace taha2samy-3 \
+            --namespace pair-ai-platform \
             --license Apache-2.0
           sudo chown -R "$(id -u):$(id -g)" packages .keys
           ls -l "packages/${{ matrix.arch }}"

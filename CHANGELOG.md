@@ -1,6 +1,6 @@
 # Changelog
 
-Every release of `ghcr.io/taha2samy-3/openssl-provider-fips` has an entry here, newest first. The
+Every release of `ghcr.io/pair-ai-platform/openssl-provider-fips` has an entry here, newest first. The
 tag is `<version>-r<epoch>`. A released tag is never rebuilt or moved; only `latest` moves.
 Renovate writes the entries for its updates with `scripts/bump-epoch.sh`. The GHCR package keeps
 the five newest versions, and the GitHub release for each tag has the same notes.

@@ -1,4 +1,4 @@
-# OpenSSL FIPS Provider for Wolfi
+# Khatm: OpenSSL FIPS Provider for Wolfi
 
 [![FIPS 140-3](https://img.shields.io/badge/FIPS%20140--3-CMVP%20%234985-blue?style=for-the-badge)](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/4985)
 [![SLSA Build L3](https://img.shields.io/badge/SLSA-Build%20L3-orange?style=for-the-badge)](#slsa-build-level-3)
@@ -41,12 +41,12 @@ we added for each, and what stays with the operator (HSMs, key management, post-
 
 ## Use it
 
-The artifact is `ghcr.io/taha2samy-3/openssl-provider-fips:<tag>`. Pulling one platform gives an
+The artifact is `ghcr.io/pair-ai-platform/openssl-provider-fips:<tag>`. Pulling one platform gives an
 APK repository (`<arch>/APKINDEX.tar.gz` and the `.apk` files) and the public key the packages
 are signed with.
 
 ```sh
-oras pull ghcr.io/taha2samy-3/openssl-provider-fips:latest --platform linux/amd64 -o fips
+oras pull ghcr.io/pair-ai-platform/openssl-provider-fips:latest --platform linux/amd64 -o fips
 # fips/melange-x86_64.rsa.pub  fips/x86_64/APKINDEX.tar.gz  fips/x86_64/*.apk
 
 cp fips/*.rsa.pub /etc/apk/keys/
@@ -72,7 +72,7 @@ In a Dockerfile:
 FROM ghcr.io/oras-project/oras:v1.3.6 AS fips
 ARG TAG=latest
 ARG TARGETARCH
-RUN oras pull ghcr.io/taha2samy-3/openssl-provider-fips:${TAG} --platform linux/${TARGETARCH} -o /fips
+RUN oras pull ghcr.io/pair-ai-platform/openssl-provider-fips:${TAG} --platform linux/${TARGETARCH} -o /fips
 
 FROM cgr.dev/chainguard/wolfi-base
 COPY --from=fips /fips /tmp/fips
@@ -98,8 +98,8 @@ Every release carries this evidence, all discoverable with `oras discover`:
 | SLSA v1 build provenance | the index, and each `.apk` file | `gh attestation verify` |
 
 ```sh
-IMAGE=ghcr.io/taha2samy-3/openssl-provider-fips:3.1.2-r0
-REPO=taha2samy-3/fips-openssl
+IMAGE=ghcr.io/pair-ai-platform/openssl-provider-fips:3.1.2-r0
+REPO=Pair-AI-Platform/khatm
 WORKFLOW="$REPO/.github/workflows/build.yml"
 
 # Signature: made by this repository's build workflow, nothing else
