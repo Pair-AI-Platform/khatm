@@ -138,18 +138,24 @@ cmp khatm.rsa.pub fips/khatm.rsa.pub
 
 ## Versions, tags and changelog
 
-- **Release tags are immutable.** A tag is `<version>-r<epoch>`, for example `3.1.2-r4`. The
-  release workflow never overwrites an existing tag, and `pr.yml` fails any pull request that
-  changes the packages without a new epoch. A tag therefore always points to the same digest and
-  the same evidence.
-- **`latest`** is the only tag that moves. It moves only after the new release is signed,
-  attested and verified, so it never points to a release without its evidence.
-- **The five newest versions are kept.** After each release,
-  [ghcr-cleanup-action](https://github.com/dataaxiom/ghcr-cleanup-action) deletes older versions
-  together with their platform manifests and referrers. It never touches the evidence of a version
-  that is kept.
-- **[CHANGELOG.md](CHANGELOG.md)** has an entry for every tag, listing each package that changed
-  (from → to). The GitHub release of the tag carries the same notes.
+Only the **five newest versions** exist at any time, and every tag that exists is complete:
+
+- **A version is tagged only when it is complete.** The artifact is pushed by digest, without a
+  tag. It is signed, attested, and the signatures, SBOMs and provenance are verified; only then
+  are the release tag (`<version>-r<epoch>`, for example `3.1.2-r4`) and `latest` created, in the
+  last step. If a run fails before that, no tag exists and the untagged leftovers are deleted;
+  re-running it publishes the version from the start.
+- **Release tags are immutable.** An existing tag is never overwritten or rebuilt, and a pull
+  request that changes the packages must bring a new epoch (`pr.yml` checks it). A tag always
+  points to the same digest and the same evidence.
+- **`latest` is the only tag that moves**, always to the newest verified version.
+- **Five versions are kept.** After each release the five newest release tags stay in GHCR with
+  their platform manifests and referrers; older versions, and anything untagged or orphaned, are
+  deleted ([ghcr-cleanup-action](https://github.com/dataaxiom/ghcr-cleanup-action)). Only release
+  tags are counted, so `latest` and the `sha256-…` referrer tags never push a version out. The
+  GitHub releases and git tags follow the same rule.
+- **[CHANGELOG.md](CHANGELOG.md)** has an entry for every version, listing each package that
+  changed (from → to). The GitHub release of the tag carries the same notes.
 
 ---
 

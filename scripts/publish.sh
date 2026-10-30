@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
-# Pushes the built packages as one multi-platform OCI artifact.
+# Pushes the built packages as one multi-platform OCI artifact, by digest and without a tag.
 #
-#   scripts/publish.sh <repository> <tag> <dist-dir>
+#   scripts/publish.sh <repository> <version> <dist-dir>
 #
 # <dist-dir> holds one APK repository per architecture (<arch>/APKINDEX.tar.gz and <arch>/*.apk)
 # and the public keys the packages are signed with (*.rsa.pub), which go into every manifest.
-# Each architecture becomes a manifest with its platform set, and <tag> points at an image index
-# over them, so `oras pull --platform` fetches one architecture. The platform manifests are pushed untagged: <tag> is the only tag.
+# Each architecture becomes a manifest with its platform set, under one image index, so
+# `oras pull --platform` fetches one architecture. <version> is only recorded as an annotation.
+#
+# Nothing is tagged here: build.yml signs, attests and verifies the digest first and tags it last,
+# so a release tag never exists without its evidence. A run that fails before that leaves only
+# untagged manifests, which the cleanup deletes.
 #
 # Prints the index digest. Set PLAIN_HTTP=1 for a local registry without TLS.
 set -euo pipefail
@@ -49,6 +53,7 @@ fi
 oras manifest index create --oci-layout "$layout:$tag" "${sources[@]}" \
   --annotation "org.opencontainers.image.version=$tag" >&2
 
-# Copies the index and its platform manifests; only <tag> is created in the registry
-oras cp ${PLAIN_HTTP:+--to-plain-http} --from-oci-layout "$layout:$tag" "$repo:$tag" >&2
-oras resolve ${PLAIN_HTTP:+--plain-http} "$repo:$tag"
+# Copies the index and its platform manifests by digest; no tag is created in the registry
+digest="$(oras resolve --oci-layout "$layout:$tag")"
+oras cp ${PLAIN_HTTP:+--to-plain-http} --from-oci-layout "$layout:$tag" "$repo@$digest" >&2
+echo "$digest"

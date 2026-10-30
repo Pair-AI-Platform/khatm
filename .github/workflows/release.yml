@@ -1,7 +1,8 @@
 name: Release
 
 # Every merge to main that changes the packages publishes a new version (see build.yml), creates a
-# GitHub release with its CHANGELOG.md entry, and keeps the five newest versions in GHCR.
+# GitHub release with its CHANGELOG.md entry, and keeps only the five newest versions, in GHCR and
+# as GitHub releases. Every job can be re-run: a failed release resumes where it stopped.
 on:
   push:
     branches:
@@ -32,9 +33,9 @@ jobs:
       publish: true
     secrets: inherit
 
+  # Also runs when the tag already existed, so a re-run creates a release that a failed run missed
   release:
     needs: build
-    if: needs.build.outputs.published == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -73,25 +74,47 @@ jobs:
           EOF
           } > notes.md
           cat notes.md
-          gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --notes-file notes.md
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::notice::GitHub release $TAG already exists"
+          else
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --notes-file notes.md
+          fi
 
-  # Keeps the five newest tagged versions with their platform manifests and referrers (signatures,
-  # SBOMs, provenance); everything older or orphaned is deleted. Never fails the release.
+  # Keeps the five newest versions and nothing else. In GHCR only the release tags (<version>-r<epoch>)
+  # are counted, so `latest` and the sha256-* referrer tags never push a version out; a kept version
+  # keeps its platform manifests and referrers (signatures, SBOMs, provenance), and untagged
+  # leftovers of failed runs are deleted. GitHub releases and their git tags follow the same rule.
+  # Never fails the release.
   cleanup:
-    needs: build
-    if: needs.build.outputs.published == 'true'
+    needs: [build, release]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     continue-on-error: true
     permissions:
+      contents: write
       packages: write
     steps:
-      - name: Keep the Five Newest Versions
+      - name: Keep the Five Newest Versions in GHCR
         uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
         with:
           package: openssl-provider-fips
+          use-regex: true
+          delete-tags: '^[0-9]+\.[0-9]+\.[0-9]+-r[0-9]+$'
           keep-n-tagged: 5
           delete-untagged: true
           delete-orphaned-images: true
           delete-partial-images: true
           validate: true
+
+      - name: Keep the Five Newest GitHub Releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release list --limit 200 --json tagName,createdAt \
+            --jq 'map(select(.tagName | test("^[0-9]+\\.[0-9]+\\.[0-9]+-r[0-9]+$")))
+                  | sort_by(.createdAt) | reverse | .[5:] | .[].tagName' |
+          while read -r tag; do
+            echo "deleting release and tag $tag"
+            gh release delete "$tag" --yes --cleanup-tag
+          done

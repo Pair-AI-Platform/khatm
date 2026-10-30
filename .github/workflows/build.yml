@@ -23,7 +23,7 @@ on:
         description: The release tag (<version>-r<epoch>)
         value: ${{ jobs.build.outputs.tag }}
       published:
-        description: "'true' when this run published a new release"
+        description: "'true' when this run published a new release, 'false' when it already existed"
         value: ${{ jobs.publish.outputs.published }}
       digest:
         description: Digest of the published image index
@@ -142,7 +142,7 @@ jobs:
       attestations: write
     outputs:
       published: ${{ steps.check.outputs.published }}
-      digest: ${{ steps.push.outputs.digest }}
+      digest: ${{ steps.push.outputs.digest || steps.check.outputs.digest }}
     env:
       TAG: ${{ needs.build.outputs.tag }}
 
@@ -173,13 +173,19 @@ jobs:
           printf '%s' "$GH_TOKEN" | cosign login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
 
       # A release tag is immutable: if it exists, nothing is pushed. Changing the packages needs a new
-      # epoch in the melange file, which pr.yml enforces.
+      # epoch in the melange file, which pr.yml enforces. Because the tag is created only after the
+      # evidence is verified (last step), an existing tag is always a complete release; a re-run
+      # after a failure in between only makes sure `latest` points at it.
       - name: Check Tag
         id: check
         run: |
-          if oras manifest fetch --descriptor "$IMAGE:$TAG" >/dev/null 2>&1; then
+          if digest="$(oras resolve "$IMAGE:$TAG" 2>/dev/null)"; then
             echo "::notice::$IMAGE:$TAG is already published; nothing to release"
             echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "digest=$digest" >> "$GITHUB_OUTPUT"
+            if [ "$(oras resolve "$IMAGE:latest" 2>/dev/null || true)" != "$digest" ]; then
+              oras tag "$IMAGE@$digest" latest
+            fi
           else
             echo "published=true" >> "$GITHUB_OUTPUT"
           fi
@@ -240,7 +246,7 @@ jobs:
         with:
           subject-path: dist/*/*.apk
 
-      # Fails the release before `latest` moves if anything above is missing
+      # Fails the release before anything is tagged if any evidence above is missing
       - name: Verify
         if: steps.check.outputs.published == 'true'
         env:
@@ -265,6 +271,8 @@ jobs:
           done
           oras discover --format tree "$IMAGE@$DIGEST"
 
-      - name: Tag latest
+      # Last step: the release tag and `latest` appear only now, on a verified digest. A run that fails
+      # earlier leaves untagged manifests only, which release.yml's cleanup deletes.
+      - name: Tag
         if: steps.check.outputs.published == 'true'
-        run: oras tag "$IMAGE@${{ steps.push.outputs.digest }}" latest
+        run: oras tag "$IMAGE@${{ steps.push.outputs.digest }}" "$TAG" latest
