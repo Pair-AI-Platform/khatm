@@ -70,9 +70,9 @@ jobs:
           epoch="$(awk '/^  epoch:/ {print $2; exit}' "$CONFIG")"
           echo "tag=$version-r$epoch" >> "$GITHUB_OUTPUT"
 
-      # APK signatures need an RSA key. Without the optional MELANGE_SIGNING_KEY secret every run
-      # signs with a throwaway key; its public half ships inside the artifact, which is itself signed
-      # keyless with Sigstore, so the key is trusted through that signature.
+      # APK signatures need an RSA key: the MELANGE_SIGNING_KEY secret, whose public half is committed
+      # as keys/khatm.rsa.pub so users can check the packages against it. Runs without the secret
+      # (pull requests from forks) sign with a throwaway key instead.
       - name: Signing Key
         env:
           SIGNING_KEY: ${{ secrets.MELANGE_SIGNING_KEY }}
@@ -81,7 +81,12 @@ jobs:
           if [ -n "$SIGNING_KEY" ]; then
             name=khatm.rsa
             (umask 077; printf '%s\n' "$SIGNING_KEY" > ".keys/$name")
-            openssl pkey -in ".keys/$name" -pubout -out ".keys/$name.pub"
+            cp "keys/$name.pub" ".keys/$name.pub"
+            # The secret must be the private half of the published public key
+            openssl pkey -in ".keys/$name" -pubout | diff -q - ".keys/$name.pub"
+          elif [ "${{ inputs.publish }}" = true ]; then
+            echo "::error::Releases need the MELANGE_SIGNING_KEY secret"
+            exit 1
           else
             name="melange-${{ matrix.arch }}.rsa"
             docker run --rm -v "$PWD/.keys":/keys -w /keys "$MELANGE_IMAGE" keygen "$name"
