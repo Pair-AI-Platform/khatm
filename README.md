@@ -165,7 +165,7 @@ Only the **five newest versions** exist at any time, and every tag that exists i
 Wolfi publishes a fix (packages.wolfi.dev)
         │
         ▼
-Renovate (.github/workflows/renovate.yml, every 4 h, this repository only)
+Renovate (.github/workflows/renovate.yml, hourly, after every check run and push, this repository only)
   • bumps the pinned packages in melange/*.yaml and the melange image, in one pull request
   • scripts/bump-epoch.sh: new epoch + CHANGELOG.md entry in the same pull request
         │
@@ -185,7 +185,7 @@ release.yml → build.yml: build, test, push, sign, attest, verify, tag latest
 | :--- | :--- |
 | Wolfi packages in the build and test environments | Renovate `apk` datasource on `https://packages.wolfi.dev/os`, pinned as `name=version`, one grouped PR, automerged |
 | melange image (`cgr.dev/chainguard/melange`) | Renovate, pinned by digest, same group |
-| GitHub Actions, oras, cosign | Renovate, pinned to commit SHAs and versions, weekly PR after 3 days, automerged |
+| GitHub Actions, oras, cosign | Renovate, pinned to commit SHAs and versions, one grouped PR once a release is 3 days old, automerged |
 | Major versions (for example OpenSSL 4 in the test environment) | Renovate opens the PR and leaves it for a human |
 | The FIPS module itself (3.1.2, cert #4985) | Never automatic: changes only by hand, when NIST lists a new certificate |
 

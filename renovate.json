@@ -104,7 +104,7 @@
       }
     },
     {
-      "description": "The GitHub Actions and CI tools do not change the packages: one weekly PR after a 3-day stability period",
+      "description": "The GitHub Actions and CI tools do not change the packages: one grouped PR as soon as a release is 3 days old, automerged",
       "matchManagers": [
         "github-actions",
         "custom.regex"
@@ -115,9 +115,6 @@
         "github-digest"
       ],
       "groupName": "ci tooling",
-      "schedule": [
-        "before 6am on monday"
-      ],
       "minimumReleaseAge": "3 days"
     },
     {
@@ -143,5 +140,8 @@
       "dependencies",
       "security"
     ]
-  }
+  },
+  "schedule": [
+    "at any time"
+  ]
 }
