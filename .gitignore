@@ -1,0 +1,19 @@
+# melange signing keys: never commit a private key
+.keys/
+*.rsa
+
+# Build output
+packages/
+dist/
+pull/
+*.apk
+APKINDEX.tar.gz
+*.spdx.json
+platforms.txt
+notes.md
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+*.swp

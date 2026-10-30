@@ -1,0 +1,347 @@
+# OpenSSL FIPS Provider 3.1.2 (CMVP certificate #4985) and the system configuration that puts
+# OpenSSL in the approved mode, packaged for Wolfi. Built natively per architecture by
+# .github/workflows/build.yml and published to GHCR as a signed OCI artifact (see README.md).
+#
+# The build follows section 11.1 of the module's security policy exactly:
+#   - the source is the openssl-3.1.2.tar.gz named in the policy, checked against its SHA-256
+#   - ./Configure enable-fips, make, make install_fips, with no other Configure options or patches
+#   - fipsmodule.cnf is written only by the module's own `openssl fipsinstall -pedantic`
+#   - fips.so is never stripped or modified after its integrity MAC is recorded
+package:
+  name: openssl-provider-fips-3.1.2
+  version: "3.1.2"
+  # Every release gets a new epoch, so a published version (3.1.2-r<epoch>) is never rebuilt or
+  # overwritten. Renovate bumps it with scripts/bump-epoch.sh; bump it by hand for manual changes.
+  epoch: 0
+  description: "OpenSSL FIPS Provider 3.1.2, FIPS 140-3 validated module (CMVP certificate #4985)"
+  url: https://github.com/taha2samy-3/fips-openssl
+  copyright:
+    - license: Apache-2.0
+  target-architecture:
+    - x86_64
+    - aarch64
+  dependencies:
+    provides:
+      - openssl-provider-fips=${{package.full-version}}
+  options:
+    no-commands: true
+
+environment:
+  contents:
+    keyring:
+      - https://packages.wolfi.dev/os/wolfi-signing.rsa.pub
+    repositories:
+      - https://packages.wolfi.dev/os
+    # Pinned to exact Wolfi versions; Renovate updates them (renovate.json)
+    packages:
+      - build-base=1-r10
+      - busybox=1.38.0-r3
+      - ca-certificates-bundle=20261020-r0
+      - linux-headers=7.3-r0
+      - perl=5.44.0-r4
+
+pipeline:
+  # SHA-256 from the FIPS 140-3 security policy of certificate #4985
+  - uses: fetch
+    with:
+      uri: https://github.com/openssl/openssl/releases/download/openssl-${{package.version}}/openssl-${{package.version}}.tar.gz
+      expected-sha256: a0ce69b8b97ea6a35b96875235aa453b966ba3cba8af2de23657d8b6767d6539
+
+  # Security policy 11.1, step 1
+  - name: Build the validated module
+    runs: |
+      ./Configure enable-fips
+      make -j$(nproc)
+
+  # install_fips installs fips.so and runs the module's self tests through fipsinstall
+  - name: make install_fips
+    runs: |
+      make install_fips DESTDIR="$PWD/fips-stage"
+      module="$(find fips-stage -type f -name fips.so)"
+      test "$(echo "$module" | wc -l)" -eq 1
+      install -Dm755 "$module" "${{targets.destdir}}/usr/lib/ossl-modules/fips.so"
+      cmp "$module" "${{targets.destdir}}/usr/lib/ossl-modules/fips.so"
+
+  # Apache License 2.0, section 4(a): binary redistributions carry a copy of the license
+  - name: License
+    runs: |
+      install -Dm644 LICENSE.txt "${{targets.destdir}}/usr/share/licenses/${{package.name}}/LICENSE.txt"
+
+  # Security policy 11.1: the configuration is written by `openssl fipsinstall -pedantic`, using the
+  # 3.1.2 tools built above. In 3.1.2 the self tests run on every load (-self_test_onload, the
+  # default), which is how they run at least once on each target machine.
+  - name: Record the integrity MAC with fipsinstall -pedantic
+    runs: |
+      mkdir -p "${{targets.destdir}}/etc/ssl"
+      ./util/wrap.pl apps/openssl fipsinstall -pedantic -self_test_onload \
+        -module "${{targets.destdir}}/usr/lib/ossl-modules/fips.so" \
+        -out "${{targets.destdir}}/etc/ssl/fipsmodule.cnf"
+      ./util/wrap.pl apps/openssl fipsinstall -verify \
+        -module "${{targets.destdir}}/usr/lib/ossl-modules/fips.so" \
+        -in "${{targets.destdir}}/etc/ssl/fipsmodule.cnf"
+      cat "${{targets.destdir}}/etc/ssl/fipsmodule.cnf"
+      grep -q '^module-mac' "${{targets.destdir}}/etc/ssl/fipsmodule.cnf"
+      # No install-time status: the file is valid on every machine the package is installed on
+      if grep -q '^install-status' "${{targets.destdir}}/etc/ssl/fipsmodule.cnf"; then
+        echo "fipsmodule.cnf must not carry an install status" >&2
+        exit 1
+      fi
+
+  # Security policy 11.1, step 2
+  - name: Verify the version
+    runs: |
+      ./util/wrap.pl apps/openssl version -v | grep -q '^OpenSSL 3.1.2 '
+
+subpackages:
+  - name: openssl-config-fipshardened
+    description: "System OpenSSL configuration that loads only the FIPS 140-3 provider (fips=yes)"
+    dependencies:
+      runtime:
+        - ${{package.name}}=${{package.full-version}}
+      # Wolfi's libcrypto ships Chainguard's default /etc/ssl/openssl.cnf (default + legacy
+      # providers); this package takes that file over from both the 3.x and the 4.0 stream
+      replaces:
+        - libcrypto3
+        - openssl-4.0-libcrypto
+      replaces-priority: 100
+    options:
+      no-commands: true
+    pipeline:
+      - runs: |
+          install -Dm644 fips-openssl.cnf "${{targets.subpkgdir}}/etc/ssl/openssl.cnf"
+    test:
+      environment:
+        contents:
+          keyring:
+            - https://packages.wolfi.dev/os/wolfi-signing.rsa.pub
+          repositories:
+            - https://packages.wolfi.dev/os
+          # Pinned like the build environment; Renovate updates them
+          packages:
+            - busybox=1.38.0-r3
+            # The OpenSSL 3 stream: what libcrypto3 users load the module with
+            - openssl-3.6=3.6.5-r1
+      pipeline:
+        - name: Only the FIPS and base providers are active
+          runs: |
+            openssl version
+            providers="$(openssl list -providers)"
+            echo "$providers"
+            echo "$providers" | grep -q 'OpenSSL FIPS Provider'
+            echo "$providers" | grep -A2 'OpenSSL FIPS Provider' | grep -q '3.1.2'
+            if echo "$providers" | grep -qi 'legacy\|OpenSSL Default Provider'; then
+              echo "a non-FIPS provider is active" >&2
+              exit 1
+            fi
+        - name: Approved algorithms work
+          runs: |
+            f=/etc/ssl/openssl.cnf
+            k128=000102030405060708090a0b0c0d0e0f
+            k256=$k128$k128
+            openssl dgst -sha256 "$f"
+            openssl dgst -sha384 "$f"
+            openssl dgst -sha512 "$f"
+            openssl dgst -sha3-256 "$f"
+            openssl mac -digest SHA256 -macopt hexkey:$k128 -in "$f" HMAC
+            openssl enc -aes-256-ctr -K $k256 -iv $k128 -in "$f" -out /dev/null
+            openssl enc -aes-256-cbc -K $k256 -iv $k128 -in "$f" -out /dev/null
+            openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out /tmp/rsa.pem
+            openssl pkeyutl -sign -inkey /tmp/rsa.pem -rawin -digest sha256 -in "$f" -out /tmp/rsa.sig
+            openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out /dev/null
+            openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-384 -out /dev/null
+            openssl rand -hex 32
+        - name: Unapproved algorithms are refused
+          runs: |
+            f=/etc/ssl/openssl.cnf
+            k128=000102030405060708090a0b0c0d0e0f
+            refused() {
+              if "$@" </dev/null >/dev/null 2>&1; then
+                echo "allowed in FIPS mode: $*" >&2
+                exit 1
+              fi
+              echo "refused: $*"
+            }
+            refused openssl dgst -md5 "$f"
+            refused openssl dgst -md4 "$f"
+            refused openssl dgst -ripemd160 "$f"
+            refused openssl enc -des-cbc -K 0001020304050607 -iv 0001020304050607 -in "$f" -out /dev/null
+            refused openssl enc -des-ede3-cbc -K ${k128}0001020304050607 -iv 0001020304050607 -in "$f" -out /dev/null
+            refused openssl enc -rc4 -K $k128 -in "$f" -out /dev/null
+            refused openssl enc -bf-cbc -K $k128 -iv 0001020304050607 -in "$f" -out /dev/null
+            refused openssl enc -chacha20 -K $k128$k128 -iv $k128 -in "$f" -out /dev/null
+            refused openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:1024 -out /dev/null
+            refused openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:secp256k1 -out /dev/null
+        - name: TLS policy stays compatible and drops what is not allowed
+          runs: |
+            cd "$(mktemp -d)"
+            fail() { echo "FAIL: $*" >&2; exit 1; }
+            for c in $(openssl ciphers -s -tls1_2 | tr ':' ' '); do
+              case "$c" in
+                *GCM*|*CCM*) ;;
+                *) fail "TLS 1.2 suite without AEAD: $c" ;;
+              esac
+            done
+            openssl req -x509 -newkey rsa:2048 -sha256 -nodes -keyout k.pem -out c.pem \
+              -subj /CN=localhost -days 1 2>/dev/null
+            # One server per handshake; the whole client output is captured before it is checked
+            expect() {
+              want="$1"; why="$2"; shift 2
+              openssl s_server -quiet -accept 4433 -cert c.pem -key k.pem -naccept 1 >srv.log 2>&1 &
+              srv=$!
+              sleep 1
+              # s_client fails on purpose in the refusal checks; the scripts run with -e and pipefail
+              out="$(echo Q | timeout 10 openssl s_client -connect 127.0.0.1:4433 "$@" 2>&1)" || true
+              kill "$srv" 2>/dev/null || true
+              wait "$srv" 2>/dev/null || true
+              if ! echo "$out" | grep -q "$want"; then
+                echo "$out"; cat srv.log
+                fail "$why"
+              fi
+              echo "ok: $why"
+            }
+            expect 'Cipher is TLS_AES' "RSA-2048 / SHA-256 server is reachable"
+            expect 'Cipher is (NONE)' "X25519 is refused" -groups X25519
+            expect 'no protocols available' "TLS 1.1 is refused" -tls1_1
+
+  - name: openssl-config-fips-strict
+    description: "System OpenSSL configuration: FIPS 140-3 provider only (fips=yes) and the NCA NCS-1:2020 MODERATE TLS policy"
+    dependencies:
+      runtime:
+        - ${{package.name}}=${{package.full-version}}
+      # Takes over /etc/ssl/openssl.cnf like openssl-config-fipshardened; install one or the other
+      replaces:
+        - libcrypto3
+        - openssl-4.0-libcrypto
+      replaces-priority: 100
+    options:
+      no-commands: true
+    pipeline:
+      - runs: |
+          install -Dm644 fips-strict.cnf "${{targets.subpkgdir}}/etc/ssl/openssl.cnf"
+    test:
+      environment:
+        contents:
+          keyring:
+            - https://packages.wolfi.dev/os/wolfi-signing.rsa.pub
+          repositories:
+            - https://packages.wolfi.dev/os
+          # Pinned like the build environment; Renovate updates them
+          packages:
+            - busybox=1.38.0-r3
+            - openssl-3.6=3.6.5-r1
+      pipeline:
+        - name: Only the FIPS and base providers are active
+          runs: |
+            providers="$(openssl list -providers)"
+            echo "$providers"
+            echo "$providers" | grep -A2 'OpenSSL FIPS Provider' | grep -q '3.1.2'
+            if echo "$providers" | grep -qi 'legacy\|OpenSSL Default Provider'; then
+              echo "a non-FIPS provider is active" >&2
+              exit 1
+            fi
+        - name: Only the NCS-1 TLS suites are offered
+          runs: |
+            tls12="$(openssl ciphers -s -tls1_2)"
+            tls13="$(openssl ciphers -s -tls1_3)"
+            echo "TLS 1.2: $tls12"
+            echo "TLS 1.3: $tls13"
+            test "$tls12" = "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-CCM:ECDHE-ECDSA-AES128-CCM"
+            test "$tls13" = "TLS_AES_256_GCM_SHA384"
+        - name: TLS handshakes follow NCS-1
+          runs: |
+            cd "$(mktemp -d)"
+            fail() { echo "FAIL: $*" >&2; exit 1; }
+            ca="-addext basicConstraints=critical,CA:TRUE -addext keyUsage=critical,keyCertSign,cRLSign"
+            # P-384 CA and server certificate signed with SHA-384
+            openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-384 -sha384 -nodes \
+              -keyout ca.key -out ca.crt -subj /CN=ca -days 1 $ca 2>/dev/null
+            openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-384 -nodes -keyout p384.key \
+              -out p384.csr -subj /CN=localhost 2>/dev/null
+            openssl x509 -req -in p384.csr -CA ca.crt -CAkey ca.key -CAcreateserial -sha384 \
+              -days 1 -out p384.crt 2>/dev/null
+            # An RSA-2048 CA, as most public chains still have
+            openssl req -x509 -newkey rsa:2048 -sha256 -nodes -keyout ca2048.key -out ca2048.crt \
+              -subj /CN=ca2048 -days 1 $ca 2>/dev/null
+            openssl x509 -req -in p384.csr -CA ca2048.crt -CAkey ca2048.key -CAcreateserial \
+              -sha256 -days 1 -out weakchain.crt 2>/dev/null
+            openssl req -x509 -newkey rsa:2048 -sha256 -nodes -keyout rsa2048.key \
+              -out rsa2048.crt -subj /CN=localhost -days 1 2>/dev/null
+
+            # One server per handshake; the whole client output is captured before it is checked
+            expect() {
+              cert="$1"; want="$2"; why="$3"; shift 3
+              openssl s_server -quiet -accept 4433 -cert "$cert" -key p384.key -naccept 1 >srv.log 2>&1 &
+              srv=$!
+              sleep 1
+              # s_client fails on purpose in the refusal checks; the scripts run with -e and pipefail
+              out="$(echo Q | timeout 10 openssl s_client -connect 127.0.0.1:4433 -verify_return_error "$@" 2>&1)" || true
+              kill "$srv" 2>/dev/null || true
+              wait "$srv" 2>/dev/null || true
+              if ! echo "$out" | grep -q "$want"; then
+                echo "$out"; cat srv.log
+                fail "$why"
+              fi
+              echo "ok: $why"
+            }
+            expect p384.crt 'Cipher is TLS_AES_256_GCM_SHA384' "TLS 1.3 with P-384" -CAfile ca.crt
+            expect p384.crt 'Cipher is ECDHE-ECDSA-AES256-GCM-SHA384' "TLS 1.2 with P-384" -CAfile ca.crt -tls1_2
+            expect p384.crt 'Cipher is (NONE)' "X25519 is refused" -CAfile ca.crt -groups X25519
+            expect p384.crt 'Cipher is (NONE)' "TLS 1.2 suites outside NCS-1 are refused" \
+              -CAfile ca.crt -tls1_2 -cipher ECDHE-ECDSA-AES128-GCM-SHA256
+            # Security level 3: an RSA-2048 key anywhere in the chain is refused
+            expect weakchain.crt 'CA certificate key too weak' "RSA-2048 CA is refused" -CAfile ca2048.crt
+            # s_server exits with an error when it refuses the certificate
+            out="$(timeout 5 openssl s_server -accept 4434 -cert rsa2048.crt -key rsa2048.key -naccept 1 </dev/null 2>&1)" || true
+            echo "$out" | grep -q 'ee key too small' || { echo "$out"; fail "RSA-2048 server certificate was loaded"; }
+            echo "ok: RSA-2048 server certificate is refused"
+
+test:
+  environment:
+    contents:
+      keyring:
+        - https://packages.wolfi.dev/os/wolfi-signing.rsa.pub
+      repositories:
+        - https://packages.wolfi.dev/os
+      packages:
+        - busybox=1.38.0-r3
+        # Wolfi's default openssl
+        - openssl=3.6.5-r6
+  pipeline:
+    - name: Module and integrity MAC are installed
+      runs: |
+        openssl version
+        test -f /usr/lib/ossl-modules/fips.so
+        grep -q '^module-mac' /etc/ssl/fipsmodule.cnf
+    - name: Module passes its self tests when loaded explicitly
+      runs: |
+        cat > /tmp/fips-only.cnf <<'EOF'
+        config_diagnostics = 1
+        openssl_conf = openssl_init
+        .include /etc/ssl/fipsmodule.cnf
+        [openssl_init]
+        providers = provider_sect
+        alg_section = algorithm_sect
+        [provider_sect]
+        fips = fips_sect
+        base = base_sect
+        [base_sect]
+        activate = 1
+        [algorithm_sect]
+        default_properties = fips=yes
+        EOF
+        OPENSSL_CONF=/tmp/fips-only.cnf openssl list -providers | grep -A3 'OpenSSL FIPS Provider' | grep -q 'status: active'
+        OPENSSL_CONF=/tmp/fips-only.cnf openssl dgst -sha384 /etc/ssl/fipsmodule.cnf
+    - name: A tampered integrity MAC keeps the module from loading
+      runs: |
+        sed 's/^\(module-mac *= *\).*/\100:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00/' \
+          /etc/ssl/fipsmodule.cnf > /tmp/tampered.cnf
+        sed 's#/etc/ssl/fipsmodule.cnf#/tmp/tampered.cnf#' /tmp/fips-only.cnf > /tmp/fips-tampered.cnf
+        if OPENSSL_CONF=/tmp/fips-tampered.cnf openssl list -providers | grep -A3 'OpenSSL FIPS Provider' | grep -q 'status: active'; then
+          echo "module loaded with a tampered MAC" >&2
+          exit 1
+        fi
+
+update:
+  # Certified module: only changed by hand when NIST lists a new certificate
+  enabled: false
+  exclude-reason: "FIPS 140-3 validated module pinned to certificate #4985"

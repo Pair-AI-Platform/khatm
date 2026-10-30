@@ -1,0 +1,97 @@
+name: Release
+
+# Every merge to main that changes the packages publishes a new version (see build.yml), creates a
+# GitHub release with its CHANGELOG.md entry, and keeps the five newest versions in GHCR.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'melange/**'
+      - 'scripts/publish.sh'
+      - '.github/workflows/build.yml'
+      - '.github/workflows/release.yml'
+  workflow_dispatch:
+
+# Releases run one after another, never in parallel or cancelled half-way
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  build:
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/build.yml
+    with:
+      publish: true
+    secrets: inherit
+
+  release:
+    needs: build
+    if: needs.build.outputs.published == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.build.outputs.tag }}
+      DIGEST: ${{ needs.build.outputs.digest }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/openssl-provider-fips"
+          {
+            awk -v tag="$TAG" '
+              $0 ~ "^## " tag " " {found = 1; next}
+              found && /^## / {exit}
+              found {print}
+            ' CHANGELOG.md
+            cat <<EOF
+
+          ### Artifact
+
+          \`$image:$TAG\` (\`$DIGEST\`)
+
+          \`\`\`sh
+          oras pull $image:$TAG --platform linux/amd64   # or linux/arm64
+          gh attestation verify oci://$image:$TAG --repo $GITHUB_REPOSITORY \\
+            --signer-workflow $GITHUB_REPOSITORY/.github/workflows/build.yml
+          \`\`\`
+          EOF
+          } > notes.md
+          cat notes.md
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --notes-file notes.md
+
+  # Keeps the five newest tagged versions with their platform manifests and referrers (signatures,
+  # SBOMs, provenance); everything older or orphaned is deleted. Never fails the release.
+  cleanup:
+    needs: build
+    if: needs.build.outputs.published == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    continue-on-error: true
+    permissions:
+      packages: write
+    steps:
+      - name: Keep the Five Newest Versions
+        uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
+        with:
+          package: openssl-provider-fips
+          keep-n-tagged: 5
+          delete-untagged: true
+          delete-orphaned-images: true
+          delete-partial-images: true
+          validate: true

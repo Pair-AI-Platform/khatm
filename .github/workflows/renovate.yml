@@ -1,0 +1,57 @@
+name: Renovate
+
+# Self-hosted Renovate for this repository only (no autodiscovery). Every four hours it opens or
+# updates the pull requests, and merges the ones whose checks (pr.yml) have passed.
+on:
+  schedule:
+    - cron: '17 */4 * * *'
+  workflow_dispatch:
+    inputs:
+      logLevel:
+        description: "Renovate log level (debug, info, warn, error)"
+        required: false
+        default: "info"
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  renovate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # RENOVATE_TOKEN must be a fine-grained token on this repository with Contents, Pull requests,
+      # Issues and Workflows: read/write (and Dependabot alerts: read). With GITHUB_TOKEN, Renovate
+      # cannot update workflow files, its pull requests start no checks (so nothing automerges) and
+      # its merges start no release.
+      - name: Check Token
+        env:
+          HAS_TOKEN: ${{ secrets.RENOVATE_TOKEN != '' }}
+        run: |
+          if [ "$HAS_TOKEN" != true ]; then
+            echo "::error::The RENOVATE_TOKEN secret is not set"
+            exit 1
+          fi
+
+      - name: Renovate
+        uses: renovatebot/github-action@43b963bf5dd5e57f1f95c59765a018d782870211 # v46.3.11
+        with:
+          configurationFile: renovate.json
+          token: ${{ secrets.RENOVATE_TOKEN }}
+        env:
+          RENOVATE_REPOSITORIES: ${{ github.repository }}
+          RENOVATE_AUTODISCOVER: 'false'
+          RENOVATE_ONBOARDING: 'false'
+          RENOVATE_REQUIRE_CONFIG: 'optional'
+          # The only command a pull request may run: the epoch bump and CHANGELOG entry
+          RENOVATE_ALLOWED_COMMANDS: '["^bash scripts/bump-epoch\\.sh$"]'
+          LOG_LEVEL: ${{ inputs.logLevel || 'info' }}

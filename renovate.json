@@ -1,0 +1,147 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Keeps the Wolfi packages in the melange environments, the melange image, the CI tools and the GitHub Actions current. Runs self-hosted on this repository only (.github/workflows/renovate.yml). Updates that change the packages get a new epoch and a CHANGELOG.md entry from scripts/bump-epoch.sh, so every update is a new, immutable release tag.",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests",
+    ":dependencyDashboard",
+    ":semanticCommitTypeAll(chore)"
+  ],
+  "timezone": "Africa/Cairo",
+  "enabledManagers": [
+    "github-actions",
+    "custom.regex"
+  ],
+  "labels": [
+    "dependencies"
+  ],
+  "prHourlyLimit": 0,
+  "prConcurrentLimit": 10,
+  "automerge": true,
+  "automergeType": "pr",
+  "automergeStrategy": "squash",
+  "platformAutomerge": false,
+  "ignoreTests": false,
+  "rebaseWhen": "behind-base-branch",
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Wolfi packages pinned as name=version in the melange build and test environments",
+      "managerFilePatterns": [
+        "/^melange/[^/]+\\.yaml$/"
+      ],
+      "matchStrings": [
+        "\\n\\s+- (?<depName>[a-z0-9][a-z0-9._+-]*)=(?<currentValue>[0-9][^\\s]*)"
+      ],
+      "datasourceTemplate": "apk",
+      "versioningTemplate": "apk",
+      "registryUrlTemplate": "https://packages.wolfi.dev/os?arch=x86_64"
+    },
+    {
+      "customType": "regex",
+      "description": "The melange image, pinned by tag and digest",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/[^/]+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "MELANGE_IMAGE: (?<depName>cgr\\.dev/chainguard/melange):(?<currentValue>[\\w.-]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "Tool versions annotated with a '# renovate:' comment in the workflows",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/[^/]+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n\\s+[\\w-]+: [\"']?(?<currentValue>[^\"'\\s]+)"
+      ],
+      "extractVersionTemplate": "^v?(?<version>.+)$"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Wolfi packages in the melange environments: one pull request with a new epoch and a CHANGELOG entry (scripts/bump-epoch.sh)",
+      "matchDatasources": [
+        "apk"
+      ],
+      "groupName": "wolfi build environment",
+      "labels": [
+        "dependencies",
+        "wolfi"
+      ],
+      "postUpgradeTasks": {
+        "commands": [
+          "bash scripts/bump-epoch.sh"
+        ],
+        "fileFilters": [
+          "melange/**",
+          "CHANGELOG.md"
+        ],
+        "executionMode": "branch"
+      }
+    },
+    {
+      "matchDepNames": [
+        "cgr.dev/chainguard/melange"
+      ],
+      "groupName": "wolfi build environment",
+      "labels": [
+        "dependencies",
+        "wolfi"
+      ],
+      "description": "The melange image builds the packages too: same group, same epoch bump",
+      "postUpgradeTasks": {
+        "commands": [
+          "bash scripts/bump-epoch.sh"
+        ],
+        "fileFilters": [
+          "melange/**",
+          "CHANGELOG.md"
+        ],
+        "executionMode": "branch"
+      }
+    },
+    {
+      "description": "The GitHub Actions and CI tools do not change the packages: one weekly PR after a 3-day stability period",
+      "matchManagers": [
+        "github-actions",
+        "custom.regex"
+      ],
+      "matchDatasources": [
+        "github-tags",
+        "github-releases",
+        "github-digest"
+      ],
+      "groupName": "ci tooling",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "Major versions change behaviour (for example OpenSSL 4 in the test environment): open the PR, merge it by hand",
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "automerge": false,
+      "labels": [
+        "dependencies",
+        "major"
+      ]
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "automerge": true,
+    "schedule": [
+      "at any time"
+    ],
+    "minimumReleaseAge": null,
+    "labels": [
+      "dependencies",
+      "security"
+    ]
+  }
+}
