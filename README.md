@@ -19,7 +19,7 @@ Every release publishes three packages, for `x86_64` and `aarch64`. Install the 
 | Package | What it is | Aligned with |
 | :--- | :--- | :--- |
 | `openssl-provider-fips-3.1.2` | The validated module: `/usr/lib/ossl-modules/fips.so` and `/etc/ssl/fipsmodule.cnf` with its integrity MAC | FIPS 140-3, [CMVP #4985](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/4985) (Level 1, approved mode) |
-| `openssl-config-fipshardened` | `/etc/ssl/openssl.cnf` for systems that also talk to the internet: only the FIPS and base providers (`fips=yes`), TLS 1.2+, AEAD suites with forward secrecy, no X25519/X448/Ed25519/Ed448, no SHA-1 signatures, DH from 3072 bits | 🇰🇼 CBK CORF §5.3.1.3(i), §8.1.4.5 · NBCC CLD-16 · 🇶🇦 QNCS v1.0 algorithms and TLS (Tables 1, 2, 5, 10) · 🇸🇦 NCA Cryptography Standard Template 1-3 · 🇧🇭 CBB OM Appendix C · 🇦🇪 IA Regulation T7.4.1 |
+| `openssl-config-fipshardened` | `/etc/ssl/openssl.cnf` for systems that also talk to the internet: only the FIPS and base providers (`fips=yes`), TLS 1.2+, AEAD suites with forward secrecy, no X25519/X448/Ed25519/Ed448, no SHA-1 signatures, DH from 3072 bits | 🇰🇼 CBK CORF §5.3.1.3(i), §8.1.4.5 · NBCC CLD-16 · 🇶🇦 QNCS v1.0 algorithms and TLS (Tables 1, 2, 5, 10) · 🇸🇦 NCA Cryptography Standard Template 1-3 · 🇧🇭 CBB OM Appendix C · 🇦🇪 IA Regulation v1.1 T7.4.1 |
 | `openssl-config-fips-strict` | `/etc/ssl/openssl.cnf` for closed networks and national PKIs: everything above, plus RSA ≥ 3072 and EC ≥ 256 bits in every certificate chain, only `TLS_AES_256_GCM_SHA384` in TLS 1.3, only ECDHE-ECDSA AES-GCM/CCM in TLS 1.2, P-384/P-256 only, SHA-384 handshake signatures | Everything above, plus 🇸🇦 **NCA NCS-1:2020 MODERATE** for TLS (§2.2, §3.6.2, §3.8, §4.2, §5.1 key sizes), which ECC-2:2024 2-8-3 and DCC-1:2022 2-5-1-2 (Confidential data) require · 🇶🇦 QNCS RSA ≥ 3000 (Tables 4, 7) |
 
 "Aligned with" covers the cryptographic part of each clause; the clause numbers, the links, what
@@ -98,6 +98,7 @@ Every release carries this evidence, all discoverable with `oras discover`:
 | :--- | :--- | :--- |
 | Sigstore signature (keyless, logged in Rekor) | the index and each platform manifest | `cosign verify` |
 | SPDX SBOM of each package | each platform manifest | `cosign verify-attestation --type spdxjson` |
+| Cryptographic inventory (what each configuration allows) | each platform manifest, and the GitHub release | `cosign verify-attestation --type https://github.com/Pair-AI-Platform/khatm/attestations/crypto-inventory/v1` |
 | SLSA v1 build provenance | the index, and each `.apk` file | `gh attestation verify` |
 
 ```sh
@@ -229,16 +230,23 @@ policy exactly.
 - **Tested operational environments.** The security policy (Table 3) lists Ubuntu 22.04 and
   Debian 11 (Intel i7-8550U), FreeBSD 13.1 and Windows 10 (Intel i7-10510U), and macOS 11 on Intel
   and on Apple M1, and states "No operational environments are vendor affirmed". Running the
-  module on Wolfi is therefore a port to an operational environment that was not tested. The CMVP
-  allows porting a Level 1 software module like this one (FIPS 140-3 Management Manual, Section
-  7.9), but makes no statement about its correct operation there; the operator affirms that the
-  module is used unchanged. That applies to `x86_64`, and more strongly to `aarch64`, because Linux
+  module on Wolfi is therefore a port to an operational environment that was not tested. The
+  [CMVP FIPS 140-3 Management Manual](https://csrc.nist.gov/projects/cryptographic-module-validation-program)
+  (v2.7, 4 September 2026) allows exactly this in §7.9.2: a user may perform post-validation
+  porting of a Level 1 module to "any general-purpose platform/processor that supports the
+  specified operating system… or another compatible operating system", and, per its footnote 5,
+  recompile it "if the unmodified source code is available and the module's Security Policy
+  provides specific guidance on acceptable recompilation methods", which is how khatm builds it.
+  The CMVP makes no statement about correct operation there; the operator affirms that the module
+  is used unchanged. That applies to `x86_64`, and more strongly to `aarch64`, because Linux
   on ARM is not among the tested environments.
 - **Status.** #4985 is a FIPS 140-3 certificate: Active, sunset date 10 March 2030, overall
   Level 1, caveat "When operated in approved mode". It is the only active certificate of the
-  OpenSSL Project: the FIPS 140-2 certificates of the 3.0 providers (#4282, #4811) moved to the
-  Historical list on 21–22 September 2026
-  ([NIST transition page](https://csrc.nist.gov/projects/fips-140-3-transition-effort)). The
+  OpenSSL Project: the FIPS 140-2 certificates of the 3.0 providers (#4282, #4811) are on the
+  Historical list since the FIPS 140-2 sunset of 21 September 2026
+  ([NIST transition page](https://csrc.nist.gov/projects/fips-140-3-transition-effort)). A new
+  OpenSSL FIPS Provider submission is on the CMVP "Modules In Process" list with status "Comment
+  Resolution - CMVP" (21 October 2026); no certificate has been issued for it yet. The
   current status is always on the
   [certificate page](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/4985).
 - **Legacy provider.** Wolfi's libcrypto depends on `openssl-provider-legacy-allowed`, which
@@ -269,7 +277,7 @@ national rules, should not use X25519 and should set their own minimums. See
 
 ## Cryptography rules in Kuwait and the GCC
 
-*Checked on 30 October 2026. Each row links the document it comes from. "Primary" means the official
+*Checked on 31 October 2026 against the current version of each document. Each row links the document it comes from. "Primary" means the official
 text was read; rows marked **secondary** rely on news or law-firm summaries because the official
 text could not be opened. This is technical information, not legal advice.*
 
@@ -284,7 +292,7 @@ build: real TLS handshakes that must succeed, and ones that must be refused.
 
 | What we added | Where | Rule it follows |
 | :--- | :--- | :--- |
-| Only the FIPS 140-3 validated module and the base provider are loaded; every algorithm comes from the module (`fips=yes`) | both configuration packages | CORF §5.3.1.3(i) and §8.1.4.5, ECC 2-8-3-1, SAMA CSF 3.3.9, IA T7.4.1 |
+| Only the FIPS 140-3 validated module and the base provider are loaded; every algorithm comes from the module (`fips=yes`) | both configuration packages | CORF §5.3.1.3(i) and §8.1.4.5, ECC 2-8-3-1, SAMA CSF 3.3.9, UAE IA Regulation v1.1 T7.4.1 |
 | MD5, MD4, RIPEMD-160, DES, 3DES encryption, RC4, Blowfish, ChaCha20, RSA-1024 and secp256k1 are refused, tested on every build | the FIPS module, enforced by the configuration | NCS-1 whitelist (§2–§3), NCA Template 1-3, CORF §5.3.1.3(i) |
 | TLS 1.0 and 1.1, SSLv2 and SSLv3 are refused | both configurations | NCS-1 §4.2, QNCS Table 10, NCA Template 1-3 |
 | TLS 1.2 only with forward secrecy and AEAD (no CBC or SHA-1 MAC suites) | both configurations | NCS-1 §3.6.2 ("with forward secrecy"), CORF §5.3.1.3(i) |
@@ -312,7 +320,7 @@ They have to be handled by the application, the CA or the operator:
 | `fipsmodule.cnf` and the module itself | The security policy (§11.1) forbids changing them; a change would leave the validated module | Never edit them; update only when NIST lists a new certificate |
 | Wolfi as an operational environment | The certificate lists other environments; Wolfi and aarch64 are a port affirmed by the operator (CMVP Management Manual, Section 7.9) | Documented in [What the certificate covers](#what-the-certificate-covers) |
 | An application that loads another provider (for example `legacy`) on purpose | OpenSSL lets programs load providers explicitly, and Wolfi's libcrypto installs `legacy.so` as a dependency | Review applications; the configuration never loads it |
-| Key management, dual control, rotation | Processes, not software (CORF §5.7.1.2, §5.7.1.5, §5.7.1.6; ECC 2-8-3-2; IA T7.4.2) | Operator procedures and an HSM or KMS |
+| Key management, dual control, rotation | Processes, not software (CORF §5.7.1.2, §5.7.1.5, §5.7.1.6; ECC 2-8-3-2; UAE IA Regulation v1.1 T7.4.2) | Operator procedures and an HSM or KMS |
 
 ### Why some requirements are out of reach for any software package
 
@@ -328,17 +336,43 @@ software modules at Level 1 at most, and #4985 is Level 1. Only tamper-resistant
 an HSM or a cloud HSM, reaches Level 3. OpenSSL can use an HSM through a PKCS#11 provider, which is
 outside this package.
 
-**Key management (KMS).** CBK CORF §5.7.1.2, §5.7.1.5 and §5.7.1.6, ECC 2-8-3-2 and UAE IA T7.4.2
+**Key management (KMS).** CBK CORF §5.7.1.2, §5.7.1.5 and §5.7.1.6, ECC 2-8-3-2 and UAE IA Regulation v1.1 T7.4.2
 cover generating, storing, separating, rotating and destroying keys under dual control. OpenSSL
 performs cryptographic operations with the keys it is given; it does not manage their lifecycle.
 That needs a key management system and documented procedures.
 
 **Post-quantum cryptography.** The UAE National Encryption Policy asks for post-quantum migration
-plans, and the NCS-2:2025 draft adds ML-KEM and ML-DSA. OpenSSL implements them from version 3.5,
-but no OpenSSL FIPS provider with them is validated yet: according to the OpenSSL project, the 3.5
-provider is still in CMVP review. Using an unvalidated provider would give up the FIPS 140-3
+plans, SAMA's circular 482021280 (27 August 2026) asks banks to inventory their cryptographic
+assets by the end of 2026 and assess quantum risk by the end of March 2027, and the NCS-2:2025
+draft would require every cryptographic system to support post-quantum algorithms in hybrid mode
+(2-5-5-1, 2-5-5-2). OpenSSL implements ML-KEM and ML-DSA from version 3.5, but no OpenSSL FIPS
+provider with them is validated yet: the next OpenSSL submission is still in CMVP review
+("Comment Resolution", October 2026). Using an unvalidated provider would give up the FIPS 140-3
 validation, so the packages stay on 3.1.2 until NIST lists a certificate. The build pipeline is
 ready to switch to the new module as soon as it is validated.
+
+#### Post-quantum readiness
+
+Several documents now ask for a post-quantum plan rather than post-quantum algorithms today:
+
+| Document | Clause | What it asks |
+| :--- | :--- | :--- |
+| 🇰🇼 CBK CORF v1.0 | §7.1.4.1, §7.1.4.3 | Start adopting quantum-resistant algorithms; a quantum-readiness strategy with migration timelines |
+| 🇸🇦 SAMA Circular 482021280 (27 Aug 2026) | — | Inventory of cryptographic assets by the end of 2026; quantum risk assessment by March 2027 |
+| 🇦🇪 National Encryption Policy v1.0 (Nov 2025, **secondary**) | — | Approved post-quantum transition plans for government entities |
+| 🇸🇦 NCS-2:2025 (draft) | 2-5-5-1, 2-5-5-2 | All cryptographic systems to support PQC, used with classical algorithms |
+
+What this project gives toward them:
+
+- **An inventory, per release and per architecture:** `crypto-inventory-<arch>.json`, attached to
+  the GitHub release and to the artifact as a signed attestation, lists what OpenSSL actually allows
+  with each configuration: the active providers, the TLS 1.2 and TLS 1.3 suites, the minimum
+  protocol, the key-exchange groups, the signature algorithms and the security level. It is read
+  from a running OpenSSL during the build, not written by hand.
+- **Crypto agility:** the algorithm set is configuration only; switching to a provider with ML-KEM
+  and ML-DSA is a package change, released through the same signed pipeline.
+- **The dependency, stated plainly:** provider 3.1.2 (CMVP #4985) has no post-quantum algorithms,
+  and no FIPS-validated OpenSSL provider with them exists yet. No date is promised.
 
 ### Algorithms at a glance
 
@@ -378,6 +412,7 @@ ready to switch to the new module as soon as it is validated.
 | | §5.7.1.5, §5.7.1.6 | Store key-encrypting keys separately from data keys; rotate keys suspected of compromise | ″ |
 | | §5.3.1.3(i) | "disabling weak or insecure protocols and algorithms and ensuring that only latest and industry-supported algorithms are used" | ″ |
 | | §8.1.4.5 | "secure and internationally recognized strong encryption algorithms" at rest and in transit | ″ |
+| | §7.1.4.1, §7.1.4.3 | Banks "shall start considering the implications" of quantum computing "by starting to adopt quantum-resistant cryptographic algorithms", and develop a quantum-readiness strategy with "timelines and milestones for cryptographic migration" | ″ |
 | CBK – Cybersecurity Baselines v1.0, Jan 2020 (§5.7, §7.1.10) | — | Superseded by CORF; the same principles, cite CORF instead | [2020 baselines](https://fsb.org/uploads/Central-Bank-of-Kuwait.pdf) |
 | **CITRA – Data Privacy Protection Regulation**, Decision 26/2024 (7 Feb 2024), service providers licensed by CITRA | Art. 5(1)(1) | Encrypt personal data according to the provider's own data classification policy; no algorithm named | [decision](https://www.citra.gov.kw/sites/ar/Pages/DecisionsDetails.aspx?id=6) |
 | CITRA – Data Classification Policy (Decisions 9/2021 and 95/2021) | — | **Repealed** by CITRA Decision 34/2024 (18 Feb 2024): do not cite | [repeal decision](https://www.citra.gov.kw/sites/ar/Pages/DecisionsDetails.aspx?id=2) |
@@ -395,31 +430,52 @@ one, not a Kuwaiti requirement.
 | **NCA – National Cryptographic Standards NCS-1:2020** | §1.2 | Two levels: MODERATE (128-bit security), ADVANCED (256-bit) | [NCS-1 PDF](https://cdn.nca.gov.sa/ar/ncs_en.pdf) · [NCS page](https://nca.gov.sa/en/regulatory-documents/frameworks-and-standard-list/ncs/) |
 | | §2.1–§2.3, §3, §4.2, §5.1 | The algorithm whitelist in the table above: anything not listed is not accepted | ″ |
 | | §6.1 | Software cryptographic modules: private keys valid ≤ 2 years at MODERATE; **not accepted at ADVANCED** | ″ |
-| NCS-2:2025 | — | **Consultation draft** (Arabic only, consultation 10–25 Dec 2025); adds SHA2-256 at basic level, ML-KEM, ML-DSA, SLH-DSA; RSA still ≥ 3072; software modules still not accepted at advanced | [draft PDF](https://cdn.nca.gov.sa/api/files/public/upload/22ec7618-3d9a-4f04-994e-9ff77f5d1146_NCS-2-ar---Copy.pdf) |
+| NCS-2:2025 | — | **Consultation draft, not issued** as of 31 October 2026 (consultation 10–25 Dec 2025; NCA's NCS page still publishes NCS-1:2020). See [NCS-2 readiness](#ncs-2-readiness) | [Arabic draft](https://cdn.nca.gov.sa/api/files/public/upload/22ec7618-3d9a-4f04-994e-9ff77f5d1146_NCS-2-ar---Copy.pdf) · [English draft (Istitlaa)](https://istitlaa.ncc.gov.sa/en/security/nca/ncs/Documents/NCS-2-en.pdf) |
 | **NCA – Essential Cybersecurity Controls ECC-2:2024** | 2-8-3, 2-8-3-1 to 2-8-3-3 | Cryptography requirements "shall include at least the requirements in the National Cryptographic Standards"; approved solutions, key lifecycle, encryption in transit and at rest | [NCA controls](https://nca.gov.sa/en/regulatory-documents/controls-list/) |
-| **NCA – Cloud Cybersecurity Controls CCC-2:2024** | 2-7-P-1-1, 2-7-T-1-1 | Strong encryption "in according to the advanced level" of NCS-1:2020, for cloud providers and tenants | ″ |
+| **NCA – Cloud Cybersecurity Controls CCC-2:2024** | 2-7-P-1-1, 2-7-T-1-1 | Strong encryption "in according to the advanced level" of NCS-1:2020, for cloud providers and tenants (the applicability table marks both optional at Level 4) | ″ |
 | **NCA – Data Cybersecurity Controls DCC-1:2022** | 2-5-1-1, 2-5-1-2 | NCS ADVANCED level for Secret and Top Secret data; MODERATE for Confidential | ″ |
 | NCA – Critical Systems Cybersecurity Controls CSCC-1:2019 | 2-7-1-1 to 2-7-1-3 | Encrypt critical systems' data in transit and at rest with "secure and up-to-date methods, algorithms, keys and devices in accordance with what NCA issues" | ″ |
 | NCA – Cryptography Standard Template | 1-3 | Avoid "weak protocols (e.g., SSLv3 or SSLv2), and weak ciphers (e.g., DES or MD5)" | [template](https://cdn.nca.gov.sa/api/public/cms/files/e6e85d58-3ba7-4a71-93b2-438d08b737e2_STANDARD_Cryptography_Template_en--.pdf) |
 | **SAMA – Cyber Security Framework** (2017, in force) | 3.3.9 | A defined, approved cryptographic standard: approved solutions and their restrictions, when to apply them, key management; no algorithms named | [SAMA rulebook](https://rulebook.sama.gov.sa/en/node/3941) |
+| **SAMA – Circular 482021280** "Enhancement of Operational Resilience to Address Quantum Computing Risks" (27 Aug 2026, in force) | — | Banks identify and classify their cryptographic assets by the end of Q4 2026 and assess quantum risk by the end of Q1 2027; no algorithms named. The two configurations document exactly which algorithms, key sizes and TLS suites they allow, which feeds that inventory | [SAMA rulebook](https://rulebook.sama.gov.sa/en/enhancement-operational-resilience-address-quantum-computing-risks) |
 | SDAIA – PDPL Implementing Regulation | Art. 23 | Security measures and NCA controls (or recognized best practice); does not mention encryption itself | [regulation PDF](https://sdaia.gov.sa/en/SDAIA/about/Documents/ImplementingRegulationPersonalDataProtectionLaw.pdf) |
 
-**Important:** CCC-2:2024 and DCC-1:2022 (Secret and Top Secret) require the NCS ADVANCED level,
-and NCS-1 §6.1 does not accept software modules at that level. For those systems, keep the keys in
-an HSM; this package then covers the software side only.
+**Important:** CCC-2:2024 (except Level 4, where it is optional) and DCC-1:2022 (Secret and Top
+Secret) require the NCS ADVANCED level, and NCS-1 §6.1 does not accept software modules at that
+level. For those systems, keep the keys in an HSM; this package then covers the software side only.
+
+#### NCS-2 readiness
+
+NCS-2:2025 is a consultation draft; if NCA issues it as drafted it replaces NCS-1:2020, and ECC-2:2024
+2-8-3 follows it automatically. Against the draft:
+
+| Area | NCS-2 draft | `fipshardened` | `fips-strict` (built for NCS-1 MODERATE) |
+| :--- | :--- | :--- | :--- |
+| Hashes | SHA2-256, SHA2-384, SHA2-512/256 at the basic level (2-3-1-1) | ✅ aligned, SHA-256 now accepted | ✅ SHA-384 accepted |
+| RSA | ≥ 3072 basic; not accepted at advanced (2-4-1) | Allows 2048 (compatibility) | ✅ ≥ 3072 |
+| Curves | P-256, P-384, Curve25519 basic; P-521 advanced (2-4-3) | ✅ NIST curves | ✅ P-384, P-256 |
+| TLS 1.3 | `TLS_AES_128_GCM_SHA256` basic (4-2-5); `TLS_AES_256_GCM_SHA384` advanced (4-2-6) | ✅ offers both | Offers only the advanced suite: would need `TLS_AES_128_GCM_SHA256` added to be the basic profile |
+| TLS 1.2 | basic adds AES-128-GCM, ECDHE-RSA-AES-256-GCM, CBC with Encrypt-then-MAC (4-2-3) | ✅ AEAD only, stricter | ✅ within the list |
+| Certificates | intermediate and end-user ECC: P-384, P-521, Curve448, Brainpool 384/512 only; P-256 removed (5-1-4-1) | — | Accepts P-256 chains: the CA must issue P-384 or stronger |
+| Post-quantum | all cryptographic systems must support PQC, used together with classical algorithms (2-5-5-1, 2-5-5-2) | ❌ not possible with provider 3.1.2 | ❌ same |
+| Software modules | ≤ 2-year keys at basic, not accepted at advanced (6-1-2) | Same as NCS-1 | Same as NCS-1 |
+
+When NCS-2 is issued, `fips-strict` will be updated to its basic level (adding the TLS 1.3 basic
+suite and documenting the certificate rule). The post-quantum requirement can only be met by a
+FIPS provider with ML-KEM and ML-DSA, once NIST validates one.
 
 ### United Arab Emirates 🇦🇪
 
 | Document | Clause | What it requires | Source |
 | :--- | :--- | :--- | :--- |
-| **TDRA – UAE Information Assurance Regulation v1.1** (March 2020), mandatory for government and critical entities | T7.4.1 | A policy on the use of cryptographic controls that "takes into account the sector or national level restrictions including TRA's relevant issuances"; guidance on "type, strength, and quality of the encryption algorithm" | [IA Regulation (archived)](https://web.archive.org/web/2025/https://u.ae/-/media/guidelines/Guidelines-2020/UAE-IA-Regulation-v11-1.pdf) |
+| **TDRA – UAE Information Assurance Regulation v1.1** (March 2020); **superseded** by the UAE IA Standard v2.x (UAE Cyber Security Council, 2025, **secondary**: official text not public), which keeps the T/M control families and maps v1.1 in an annex | T7.4.1 | A policy on the use of cryptographic controls that "takes into account the sector or national level restrictions including TRA's relevant issuances"; guidance on "type, strength, and quality of the encryption algorithm" | [IA Regulation (archived)](https://web.archive.org/web/2025/https://u.ae/-/media/guidelines/Guidelines-2020/UAE-IA-Regulation-v11-1.pdf) |
 | | T7.4.2 | Key management for the entity's cryptographic techniques | ″ |
 | | M5.2.6 | Use cryptographic controls in line with legislation and agreements, including restrictions on import, export and use of encryption | ″ |
 | **UAE Cyber Security Council – National Encryption Policy v1.0** and Executive Regulation (Nov 2025) | **secondary** | Encryption of data at rest and in motion, key management, post-quantum migration plans; full text could not be opened | [u.ae summary](https://u.ae/en/about-the-uae/strategies-initiatives-and-awards/policies/cyber-activities/National-Encryption-Policy) |
 | **Federal Decree-Law 45/2021 (PDPL)** | Art. 20(1)(a) | "Encryption of Personal Data and the application of Pseudonymisation", per "best international practices and standards" | [UAE legislation](https://uaelegislation.gov.ae/en/legislations/1972) |
 | Dubai DESC ISR, CBUAE | — | Not verified: no public primary text | — |
 
-The UAE IA Regulation has no algorithm list and no FIPS reference; it defers to TDRA's issuances.
+The UAE IA Regulation v1.1 has no algorithm list and no FIPS reference; it defers to TDRA's issuances. The clauses above are mapped to v1.1; the mapping to the v2 standard follows once its official text is available.
 
 ### Qatar 🇶🇦
 
@@ -428,7 +484,7 @@ The UAE IA Regulation has no algorithm list and no FIPS reference; it defers to 
 | **Qatar National Cryptographic Standard v1.0** (MOTC, Oct 2019) | Tables 1, 2, 4, 5, 10 | The algorithm list in the table above: AES, SHA-2/SHA-3, RSA 3000+ after 2022, ECDSA 256–512, TLS 1.2/1.3 | [QNCS v1.0 (archived)](https://web.archive.org/web/2023/https://www.qcert.org/sites/default/files/public/documents/qatar_national_cryptographic_standard_-_version_1.0.pdf) · [MOTC](https://www.mot.gov.qa/en/news/ministry-launches-qatar-national-cryptographic-standard) |
 | | §1.2 | 3DES, Kasumi, Blowfish are legacy; "Mechanisms which are not listed are not necessarily considered by QPKI to be insecure" | ″ |
 | | VIII.6.1.1 | Keys generated and stored in systems where the "Hardware Security device should be certified FIPS 140-1 Level 3, FIPS 140-2 Level 3 or Common Criteria (CC) EAL 4 or above" | ″ |
-| Qatar NIA Policy v2.0 (MICT, 2014) | CY 1, CY 5, CY 7 | Algorithms per Appendix B (still allows 3DES and MD5 as fallbacks); TLS for C3 data in transit; HSMs at FIPS 140-2 Level 2 or EAL4. Superseded by NCSA's NIA Standard (not verified) | [archived copies](https://web.archive.org/web/*/qcert.org/*nia_policy_english_v2.0.pdf) |
+| Qatar NIA Policy v2.0 (MICT, 2014) | CY 1, CY 5, CY 7 | Algorithms per Appendix B (still allows 3DES and MD5 as fallbacks); TLS for C3 data in transit; HSMs at FIPS 140-2 Level 2 or EAL4. Superseded by the National Information Assurance Standard v2.1 (May 2023, not public), whose cryptography control CY-5 points to the Qatar National Cryptographic Standard v1.0 or higher (**secondary**) | [archived copies](https://web.archive.org/web/*/qcert.org/*nia_policy_english_v2.0.pdf) |
 
 The only GCC clauses that name FIPS 140 are Qatar's, and they apply to HSMs and smartcards, not
 to software modules.
@@ -437,7 +493,7 @@ to software modules.
 
 | Document | Clause | What it requires | Source |
 | :--- | :--- | :--- | :--- |
-| **CBB Rulebook Vol. 1, OM module** (April 2023) | OM-5.5.3 | Cyber security framework per the NIST Cybersecurity Framework | [OM module (archived)](https://web.archive.org/web/2023/https://cbben.thomsonreuters.com/sites/default/files/net_file_store/Vol_1_OM_April_2023.pdf) |
+| **CBB Rulebook Vol. 1, OM module** (April 2023 text; the module was realigned in May 2026, OM-5.5 wording unchanged) | OM-5.5.3 | Cyber security framework per the NIST Cybersecurity Framework | [OM module (archived)](https://web.archive.org/web/2023/https://cbben.thomsonreuters.com/sites/default/files/net_file_store/Vol_1_OM_April_2023.pdf) |
 | | Appendix C, Data Security 1–2 | Critical or confidential data at rest and in transit "protected through strong encryption" | ″ |
 | | OM-5.5.12(e), OM-5.2.9 | Classification decides what is encrypted; ATM account data encrypted | ″ |
 | PDPL, Law 30/2018 | Art. 8, Art. 3(5) | Appropriate technical measures (no encryption named); identities in long-retained data encrypted when anonymisation is not possible | [LLOC translation](https://www.lloc.gov.bh/FullEn/K3018.docx) |
@@ -447,7 +503,8 @@ to software modules.
 | Document | Clause | What it requires | Source |
 | :--- | :--- | :--- | :--- |
 | PDPL, Royal Decree 6/2022 | Arts. 13(c), 14, 21 | Technical and procedural measures, confidentiality; no encryption or algorithm named | [decree.om (unofficial translation)](https://decree.om/2022/l20220006/) |
-| MTCIT, OCERT, CBO | — | No public official cryptography standard found. A third-party claim that an Omani framework requires FIPS 140 could not be traced to an official source and is not relied on | — |
+| **CBO Cyber Security & Resilience Framework** (Sept 2023, **secondary**) | §3.3.4 | "Do not use weak or broken algorithms"; key length "as per the latest security standards" | Seclore regulatory brief (secondary; no public primary text found) |
+| MTCIT, OCERT | — | No public official cryptography standard found. A third-party claim that an Omani framework requires FIPS 140 could not be traced to an official source and is not relied on | — |
 
 ### In short
 
@@ -468,15 +525,16 @@ The short list from [What we cannot change](#what-we-cannot-change):
 3. **No X25519 or Ed25519** in application code.
 4. **HSMs** for NCS ADVANCED (CCC-2:2024, DCC-1:2022 Secret and Top Secret) and for Qatar QNCS
    VIII.6.1.1 and NIA CY 7.
-5. **Post-quantum migration** (UAE National Encryption Policy, NCS-2:2025 draft).
-6. **Key management and dual control** (CORF §5.7.1.2 and §5.7.1.5, ECC 2-8-3-2, IA T7.4.2).
+5. **Post-quantum migration** (CBK CORF §7.1.4.1 and §7.1.4.3, UAE National Encryption Policy, SAMA circular 482021280, NCS-2:2025 draft). See [Post-quantum readiness](#post-quantum-readiness).
+6. **Key management and dual control** (CORF §5.7.1.2 and §5.7.1.5, ECC 2-8-3-2, UAE IA Regulation v1.1 T7.4.2).
 
 ### Sources we could not read in full
 
 - Kuwait: the official NBCC annex (gazette or ncsc.gov.kw); NCSC Decision 1/2025 (data
   classification); executive regulations of Decree-Law 148/2025.
-- Saudi: whether NCS-2:2025 has been issued in final form.
-- UAE: National Encryption Policy full text; DESC ISR; CBUAE encryption rules.
+- Saudi: the English NCS-2 draft (Istitlaa's certificate had expired when checked); whether NCA has
+  adopted NCS-2 since the consultation.
+- UAE: National Encryption Policy full text (csc.gov.ae unreachable); the UAE IA Standard v2.x text and its control numbers; DESC ISR; CBUAE encryption rules.
 - Qatar: NCSA NIA Standard v2.1. Bahrain: NCSC standards, Resolution 43/2022. Oman: any official
   cryptography standard, Executive Regulation 34/2024.
 - Licensing or import approval for encryption products in any GCC state: no primary rule found.
@@ -507,7 +565,8 @@ mkdir -p .keys && (cd .keys && ../bin/melange keygen melange-x86_64.rsa)
 ```
 melange/openssl-provider-fips-3.1.2.yaml   package recipe, build/test environments pinned for Renovate
 melange/openssl-provider-fips-3.1.2/       fips-openssl.cnf and fips-strict.cnf (the two /etc/ssl/openssl.cnf)
-scripts/install-tools.sh                   melange from its GitHub release, signature and checksum verified
+scripts/install-tools.sh                   melange and apko from their GitHub releases, signature and checksum verified
+scripts/crypto-inventory.sh                what OpenSSL allows with each configuration, per architecture
 scripts/publish.sh                         push both architectures as one OCI index (oras)
 scripts/bump-epoch.sh                      new epoch + CHANGELOG entry (Renovate post-upgrade task)
 .github/workflows/build.yml                reusable: build, test, push, sign, attest, verify (SLSA L3)

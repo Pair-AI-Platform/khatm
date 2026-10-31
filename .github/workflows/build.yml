@@ -71,7 +71,7 @@ jobs:
       # It builds in Docker containers that it assembles itself from the Wolfi packages.
       - name: Install melange
         run: |
-          scripts/install-tools.sh "$RUNNER_TEMP/bin" melange
+          scripts/install-tools.sh "$RUNNER_TEMP/bin" melange apko
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
       - name: Version
@@ -124,6 +124,14 @@ jobs:
             --source-dir "$SOURCE_DIR" \
             --repository-append "$PWD/packages" \
             --keyring-append "$PWD/.keys/$KEY_NAME.pub"
+
+      # What OpenSSL actually allows with each configuration package, read from a running OpenSSL:
+      # providers, TLS suites, groups, signature algorithms (scripts/crypto-inventory.sh)
+      - name: Cryptographic Inventory
+        run: |
+          mkdir -p dist
+          scripts/crypto-inventory.sh packages ".keys/$KEY_NAME.pub" "${{ matrix.arch }}" \
+            "dist/crypto-inventory-${{ matrix.arch }}.json"
 
       - name: Collect
         run: |
@@ -225,6 +233,7 @@ jobs:
         run: cosign sign --yes --recursive "$IMAGE@${{ steps.push.outputs.digest }}"
 
       # The SPDX SBOM melange writes into each package, attested on the manifest of its platform
+      # Per platform: the SPDX SBOM of each package and the cryptographic inventory
       - name: Attest SBOMs
         if: steps.check.outputs.published == 'true'
         run: |
@@ -239,6 +248,8 @@ jobs:
               done
               rm -rf "$sbom"
             done
+            cosign attest --yes --type "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/attestations/crypto-inventory/v1" \
+              --predicate "dist/crypto-inventory-${dir[$arch]}.json" "$IMAGE@$digest"
           done < platforms.txt
 
       - name: Attest Provenance (OCI)
