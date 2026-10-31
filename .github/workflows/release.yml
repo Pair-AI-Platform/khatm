@@ -36,7 +36,7 @@ jobs:
   # Also runs when the tag already existed, so a re-run creates a release that a failed run missed
   release:
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
       contents: write
@@ -110,7 +110,7 @@ jobs:
     needs: [build, release]
     # Runs after a failed release step too: the versions in GHCR are complete either way
     if: ${{ !cancelled() && needs.build.result == 'success' }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     continue-on-error: true
     permissions:
