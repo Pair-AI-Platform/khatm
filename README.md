@@ -69,12 +69,15 @@ Install **one** of the two configuration packages, since both own `/etc/ssl/open
 In a Dockerfile:
 
 ```dockerfile
+# Your Wolfi-based image with apk, for example one built with apko
+ARG BASE_IMAGE
+
 FROM ghcr.io/oras-project/oras:v1.3.6 AS fips
 ARG TAG=latest
 ARG TARGETARCH
 RUN oras pull ghcr.io/pair-ai-platform/openssl-provider-fips:${TAG} --platform linux/${TARGETARCH} -o /fips
 
-FROM cgr.dev/chainguard/wolfi-base
+FROM ${BASE_IMAGE}
 COPY --from=fips /fips /tmp/fips
 RUN cp /tmp/fips/*.rsa.pub /etc/apk/keys/ && \
     apk add --no-cache --repository /tmp/fips openssl openssl-config-fipshardened && \
@@ -184,7 +187,7 @@ release.yml → build.yml: build, test, push, sign, attest, verify, tag latest
 | What | How it is kept current |
 | :--- | :--- |
 | Wolfi packages in the build and test environments | Renovate `apk` datasource on `https://packages.wolfi.dev/os`, pinned as `name=version`, one grouped PR, automerged |
-| melange image (`cgr.dev/chainguard/melange`) | Renovate, pinned by digest, same group |
+| melange (from its GitHub release, version in `scripts/install-tools.sh`) | Renovate, same group |
 | GitHub Actions, oras, cosign | Renovate, pinned to commit SHAs and versions, one grouped PR once a release is 3 days old, automerged |
 | Major versions (for example OpenSSL 4 in the test environment) | Renovate opens the PR and leaves it for a human |
 | The FIPS module itself (3.1.2, cert #4985) | Never automatic: changes only by hand, when NIST lists a new certificate |
@@ -480,18 +483,17 @@ Repository settings, secrets and the release process are in [MAINTAINING.md](MAI
 
 ## Build locally
 
-The package tests need `--privileged` Docker. Building on amd64:
+Needs Docker, curl and cosign. melange comes from its GitHub release, signature and checksum
+verified, and builds in Docker containers it assembles from the Wolfi packages:
 
 ```sh
-mkdir -p .keys
-docker run --rm -v "$PWD/.keys":/keys -w /keys cgr.dev/chainguard/melange keygen melange-x86_64.rsa
-docker run --rm --privileged -v "$PWD":/work -w /work cgr.dev/chainguard/melange build \
-  melange/openssl-provider-fips-3.1.2.yaml --arch x86_64 \
+scripts/install-tools.sh ./bin melange
+mkdir -p .keys && (cd .keys && ../bin/melange keygen melange-x86_64.rsa)
+./bin/melange build melange/openssl-provider-fips-3.1.2.yaml --runner docker --arch x86_64 \
   --source-dir melange/openssl-provider-fips-3.1.2 --signing-key .keys/melange-x86_64.rsa --out-dir packages
-docker run --rm --privileged -v "$PWD":/work -w /work cgr.dev/chainguard/melange test \
-  melange/openssl-provider-fips-3.1.2.yaml --arch x86_64 \
+./bin/melange test melange/openssl-provider-fips-3.1.2.yaml --runner docker --arch x86_64 \
   --source-dir melange/openssl-provider-fips-3.1.2 \
-  --repository-append /work/packages --keyring-append /work/.keys/melange-x86_64.rsa.pub
+  --repository-append "$PWD/packages" --keyring-append "$PWD/.keys/melange-x86_64.rsa.pub"
 ```
 
 ## Layout
@@ -499,6 +501,7 @@ docker run --rm --privileged -v "$PWD":/work -w /work cgr.dev/chainguard/melange
 ```
 melange/openssl-provider-fips-3.1.2.yaml   package recipe, build/test environments pinned for Renovate
 melange/openssl-provider-fips-3.1.2/       fips-openssl.cnf and fips-strict.cnf (the two /etc/ssl/openssl.cnf)
+scripts/install-tools.sh                   melange from its GitHub release, signature and checksum verified
 scripts/publish.sh                         push both architectures as one OCI index (oras)
 scripts/bump-epoch.sh                      new epoch + CHANGELOG entry (Renovate post-upgrade task)
 .github/workflows/build.yml                reusable: build, test, push, sign, attest, verify (SLSA L3)
@@ -509,3 +512,10 @@ renovate.json                              update rules, grouping, automerge
 CHANGELOG.md                               what changed in every tag
 MAINTAINING.md                             repository settings and release process
 ```
+
+## License
+
+The code in this repository (build definitions, workflows, scripts and documentation) is licensed
+under the [Apache License 2.0](LICENSE). The software inside the packages keeps its own license:
+the OpenSSL FIPS Provider is Apache License 2.0, and the provider package ships its `LICENSE.txt`.
+[NOTICE](NOTICE) lists the third-party software, the build tools and the trademarks.

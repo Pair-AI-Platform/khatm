@@ -1,0 +1,25 @@
+khatm
+Copyright 2026 Pair-AI-Platform
+
+This repository is licensed under the Apache License, Version 2.0 (see LICENSE). That license covers
+the build definitions, configuration files, workflows, scripts and documentation in it.
+
+Third-party software in the published packages
+----------------------------------------------
+The packages keep the licenses of the software they contain:
+
+- OpenSSL FIPS Provider 3.1.2, by the OpenSSL Project: Apache License 2.0. The provider package
+  ships the license text as /usr/share/licenses/openssl-provider-fips-3.1.2/LICENSE.txt.
+- The packages are built and tested with Wolfi packages (https://packages.wolfi.dev), each under
+  its upstream license. The Wolfi build recipes are Apache License 2.0
+  (https://github.com/wolfi-dev/os).
+
+Build tools (used, not distributed)
+-----------------------------------
+melange, oras and cosign, all Apache License 2.0, installed from their GitHub releases.
+
+Trademarks
+----------
+OpenSSL, Wolfi, Chainguard and other names are trademarks of their respective owners. They are used
+only to identify the software involved. This project is not affiliated with or endorsed by the
+OpenSSL Project, the OpenSSL Foundation, NIST, Chainguard, or any regulator named in the README.

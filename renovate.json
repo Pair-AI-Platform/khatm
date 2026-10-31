@@ -1,6 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "description": "Keeps the Wolfi packages in the melange environments, the melange image, the CI tools and the GitHub Actions current. Runs self-hosted on this repository only (.github/workflows/renovate.yml). Updates that change the packages get a new epoch and a CHANGELOG.md entry from scripts/bump-epoch.sh, so every update is a new, immutable release tag.",
+  "description": "Keeps the Wolfi packages in the melange environments, melange, the CI tools and the GitHub Actions current. Runs self-hosted on this repository only (.github/workflows/renovate.yml). Updates that change the packages get a new epoch and a CHANGELOG.md entry from scripts/bump-epoch.sh, so every update is a new, immutable release tag.",
   "extends": [
     "config:recommended",
     "helpers:pinGitHubActionDigests",
@@ -39,23 +39,13 @@
     },
     {
       "customType": "regex",
-      "description": "The melange image, pinned by tag and digest",
+      "description": "Tool versions annotated with a '# renovate:' comment in the workflows and scripts",
       "managerFilePatterns": [
-        "/^\\.github/workflows/[^/]+\\.ya?ml$/"
+        "/^\\.github/workflows/[^/]+\\.ya?ml$/",
+        "/^scripts/[^/]+\\.sh$/"
       ],
       "matchStrings": [
-        "MELANGE_IMAGE: (?<depName>cgr\\.dev/chainguard/melange):(?<currentValue>[\\w.-]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
-      ],
-      "datasourceTemplate": "docker"
-    },
-    {
-      "customType": "regex",
-      "description": "Tool versions annotated with a '# renovate:' comment in the workflows",
-      "managerFilePatterns": [
-        "/^\\.github/workflows/[^/]+\\.ya?ml$/"
-      ],
-      "matchStrings": [
-        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n\\s+[\\w-]+: [\"']?(?<currentValue>[^\"'\\s]+)"
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n\\s*[\\w-]+(?::\\s|=)[\"']?(?<currentValue>[^\"'\\s]+)"
       ],
       "extractVersionTemplate": "^v?(?<version>.+)$"
     }
@@ -77,27 +67,7 @@
         ],
         "fileFilters": [
           "melange/**",
-          "CHANGELOG.md"
-        ],
-        "executionMode": "branch"
-      }
-    },
-    {
-      "matchDepNames": [
-        "cgr.dev/chainguard/melange"
-      ],
-      "groupName": "wolfi build environment",
-      "labels": [
-        "dependencies",
-        "wolfi"
-      ],
-      "description": "The melange image builds the packages too: same group, same epoch bump",
-      "postUpgradeTasks": {
-        "commands": [
-          "bash scripts/bump-epoch.sh"
-        ],
-        "fileFilters": [
-          "melange/**",
+          "scripts/install-tools.sh",
           "CHANGELOG.md"
         ],
         "executionMode": "branch"
@@ -116,6 +86,28 @@
       ],
       "groupName": "ci tooling",
       "minimumReleaseAge": "3 days"
+    },
+    {
+      "matchDepNames": [
+        "chainguard-dev/melange"
+      ],
+      "groupName": "wolfi build environment",
+      "labels": [
+        "dependencies",
+        "wolfi"
+      ],
+      "description": "melange builds the packages too: same group, same epoch bump",
+      "postUpgradeTasks": {
+        "commands": [
+          "bash scripts/bump-epoch.sh"
+        ],
+        "fileFilters": [
+          "melange/**",
+          "scripts/install-tools.sh",
+          "CHANGELOG.md"
+        ],
+        "executionMode": "branch"
+      }
     },
     {
       "description": "Major versions change behaviour (for example OpenSSL 4 in the test environment): open the PR, merge it by hand",

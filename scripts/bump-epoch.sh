@@ -18,13 +18,13 @@ sed -i "s/^  epoch: .*/  epoch: $epoch/" "$config"
 version="$(awk -F'"' '/^  version:/ {print $2; exit}' "$config")"
 tag="$version-r$epoch"
 
-# "name=version" pins (melange environments) and the digest-pinned melange image, before and after
-changes="$(git diff -U0 HEAD -- melange/ .github/workflows/build.yml | awk '
+# "name=version" pins (melange environments) and the melange version, before and after
+changes="$(git diff -U0 HEAD -- melange/ scripts/install-tools.sh | awk '
   function record(side, line,    name, value) {
     sub(/^[-+][[:space:]]*(- )?/, "", line)
-    if (line ~ /^MELANGE_IMAGE:/) {
-      name = "melange (image)"
-      value = line; sub(/.*@sha256:/, "", value); value = "sha256:" substr(value, 1, 12)
+    if (line ~ /^MELANGE_VERSION=/) {
+      name = "melange"
+      value = line; sub(/^MELANGE_VERSION=/, "", value)
     } else if (line ~ /^[a-z0-9][a-z0-9._+-]*=[0-9]/) {
       name = line; sub(/=.*/, "", name)
       value = line; sub(/^[^=]*=/, "", value); sub(/[[:space:]].*/, "", value)

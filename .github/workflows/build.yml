@@ -32,8 +32,11 @@ on:
 permissions: {}
 
 env:
+<<<<<<< HEAD
   # Pinned by digest; Renovate updates it with the Wolfi packages (renovate.json)
   MELANGE_IMAGE: cgr.dev/chainguard/melange:latest@sha256:c6eea71bf274b94d84c04238861d7abea55b61b50da921b88c194c112123593b
+=======
+>>>>>>> b76ff77 (feat: add project licensing, tooling setup scripts, and update build configuration and epoch bumping logic)
   CONFIG: melange/openssl-provider-fips-3.1.2.yaml
   SOURCE_DIR: melange/openssl-provider-fips-3.1.2
   PACKAGE: openssl-provider-fips
@@ -63,6 +66,19 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          # renovate: datasource=github-releases depName=sigstore/cosign
+          cosign-release: v3.1.4
+
+      # melange from its GitHub release, signature and checksum verified (scripts/install-tools.sh).
+      # It builds in Docker containers that it assembles itself from the Wolfi packages.
+      - name: Install melange
+        run: |
+          scripts/install-tools.sh "$RUNNER_TEMP/bin" melange
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
       - name: Version
         id: version
         run: |
@@ -89,31 +105,30 @@ jobs:
             exit 1
           else
             name="melange-${{ matrix.arch }}.rsa"
-            docker run --rm -v "$PWD/.keys":/keys -w /keys "$MELANGE_IMAGE" keygen "$name"
+            (cd .keys && melange keygen "$name")
           fi
           echo "KEY_NAME=$name" >> "$GITHUB_ENV"
 
       - name: Build
         run: |
-          docker run --rm --privileged -v "$PWD":/work -w /work "$MELANGE_IMAGE" build "$CONFIG" \
+          melange build "$CONFIG" --runner docker \
             --arch "${{ matrix.arch }}" \
             --source-dir "$SOURCE_DIR" \
             --signing-key ".keys/$KEY_NAME" \
             --out-dir packages \
             --namespace pair-ai-platform \
             --license Apache-2.0
-          sudo chown -R "$(id -u):$(id -g)" packages .keys
           ls -l "packages/${{ matrix.arch }}"
 
       # The package tests: provider loads with Wolfi's OpenSSL 3, approved algorithms work,
       # unapproved ones are refused, a tampered integrity MAC stops the module from loading
       - name: Test
         run: |
-          docker run --rm --privileged -v "$PWD":/work -w /work "$MELANGE_IMAGE" test "$CONFIG" \
+          melange test "$CONFIG" --runner docker \
             --arch "${{ matrix.arch }}" \
             --source-dir "$SOURCE_DIR" \
-            --repository-append /work/packages \
-            --keyring-append "/work/.keys/$KEY_NAME.pub"
+            --repository-append "$PWD/packages" \
+            --keyring-append "$PWD/.keys/$KEY_NAME.pub"
 
       - name: Collect
         run: |
