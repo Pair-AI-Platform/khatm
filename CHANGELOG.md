@@ -6,6 +6,15 @@ Renovate writes the entries for its updates with `scripts/bump-epoch.sh`. The GH
 the five newest versions, and the GitHub release for each tag has the same notes.
 <!-- releases -->
 
+## 3.1.2-r2 (2026-10-31)
+
+Rebuilt with updated Wolfi packages. The FIPS module itself (OpenSSL FIPS Provider 3.1.2,
+CMVP #4985) is built from the same validated source.
+
+| Package | From | To |
+| :--- | :--- | :--- |
+| `melange (image)` | sha256:b17c529b3473 | sha256:c6eea71bf274 |
+
 ## 3.1.2-r1 (2026-10-30)
 
 Rebuilt with updated Wolfi packages. The FIPS module itself (OpenSSL FIPS Provider 3.1.2,
