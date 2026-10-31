@@ -316,7 +316,7 @@ They have to be handled by the application, the CA or the operator:
 | Certificate chains signed with SHA-256 are still accepted by the strict policy | OpenSSL has no configuration setting for the hash used in certificate signatures (`SignatureAlgorithmsCert` is not a configuration command, and setting it breaks every TLS program) | Have your CA issue SHA-384 certificates (NCS-1 §5.1); key sizes in the chain are enforced |
 | Root CA RSA ≥ 4096 bits (NCS-1 §5.1) | Security level 3 enforces 3072 bits, the next level (192-bit) would refuse P-256 and RSA-3072 | Root CA policy of your PKI |
 | NCS ADVANCED level, and hardware key storage | NCS-1 §6.1 does not accept software modules at ADVANCED; CCC-2:2024 and DCC-1:2022 (Secret, Top Secret) require ADVANCED; QNCS VIII.6.1.1 and NIA CY 7 require HSMs. This is a software module (Level 1) | Keep keys in an HSM validated to FIPS 140-2/140-3 Level 3 |
-| Post-quantum algorithms (ML-KEM, ML-DSA) | Provider 3.1.2 has none; no validated OpenSSL provider with them exists yet | Plan migration with the next certified provider |
+| Post-quantum algorithms (ML-KEM, ML-DSA) | Provider 3.1.2 has none, and they cannot be added beside it (see [Why post-quantum is off](#why-post-quantum-is-off)); no validated OpenSSL provider with them exists yet | Plan migration with the next certified provider |
 | `fipsmodule.cnf` and the module itself | The security policy (§11.1) forbids changing them; a change would leave the validated module | Never edit them; update only when NIST lists a new certificate |
 | Wolfi as an operational environment | The certificate lists other environments; Wolfi and aarch64 are a port affirmed by the operator (CMVP Management Manual, Section 7.9) | Documented in [What the certificate covers](#what-the-certificate-covers) |
 | An application that loads another provider (for example `legacy`) on purpose | OpenSSL lets programs load providers explicitly, and Wolfi's libcrypto installs `legacy.so` as a dependency | Review applications; the configuration never loads it |
@@ -350,6 +350,30 @@ provider with them is validated yet: the next OpenSSL submission is still in CMV
 ("Comment Resolution", October 2026). Using an unvalidated provider would give up the FIPS 140-3
 validation, so the packages stay on 3.1.2 until NIST lists a certificate. The build pipeline is
 ready to switch to the new module as soon as it is validated.
+
+#### Why post-quantum is off
+
+OpenSSL 3.5 and newer (including Wolfi's `openssl-3.6`, which these packages are tested with) implement ML-KEM (FIPS 203) and ML-DSA (FIPS 204), and
+hybrid TLS groups such as `X25519MLKEM768` and `SecP256r1MLKEM768`. They are not available with
+these packages, for three reasons that were each checked against the built packages:
+
+1. **The validated module does not contain them.** ML-KEM and ML-DSA live only in OpenSSL's
+   `default` provider. Provider 3.1.2 (CMVP #4985) predates FIPS 203 and FIPS 204 (August 2024).
+2. **The configuration only uses the validated module.** `default_properties = fips=yes` and a
+   provider list without `default` mean every algorithm comes from CMVP #4985. With either shipped
+   configuration, `openssl list -kem-algorithms` shows no ML-KEM.
+3. **Mixing does not work either.** We tested a configuration that also loads the `default`
+   provider, both with `?fips=yes` (prefer the module) and with no preference. TLS 1.3 offered
+   `SecP256r1MLKEM768`, but ML-KEM key generation failed (`EVP_DigestSqueeze: method not
+   supported`): ML-KEM needs the SHAKE "squeeze" operation, which SHAKE in provider 3.1.2 does not
+   have, and OpenSSL picks SHAKE from the FIPS module whenever it is loaded. Even where a mix
+   works, the ML-KEM half and the hybrid combiner would run outside the validated module, so the
+   key exchange would no longer be FIPS 140-3 cryptography.
+
+Post-quantum TLS therefore works only with the FIPS module removed. Doing that would make the
+packages pointless, so these packages stay classical-only until a FIPS provider with ML-KEM and
+ML-DSA is validated. A system that needs post-quantum key exchange today, outside the FIPS boundary,
+should use a stock OpenSSL 3.5 or newer without these packages.
 
 #### Post-quantum readiness
 
