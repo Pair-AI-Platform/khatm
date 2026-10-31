@@ -32,11 +32,6 @@ on:
 permissions: {}
 
 env:
-<<<<<<< HEAD
-  # Pinned by digest; Renovate updates it with the Wolfi packages (renovate.json)
-  MELANGE_IMAGE: cgr.dev/chainguard/melange:latest@sha256:c6eea71bf274b94d84c04238861d7abea55b61b50da921b88c194c112123593b
-=======
->>>>>>> b76ff77 (feat: add project licensing, tooling setup scripts, and update build configuration and epoch bumping logic)
   CONFIG: melange/openssl-provider-fips-3.1.2.yaml
   SOURCE_DIR: melange/openssl-provider-fips-3.1.2
   PACKAGE: openssl-provider-fips
