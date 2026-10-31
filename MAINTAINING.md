@@ -18,3 +18,27 @@ its updates.
 
 The FIPS module version (3.1.2, certificate #4985) only changes by hand, when NIST lists a new
 certificate. Never edit `fipsmodule.cnf` or patch the module.
+
+## APK signing key
+
+The APK files are signed with one RSA key (4096 bits), separate from the keyless Sigstore signature
+of the artifact. Its private half exists only as the `MELANGE_SIGNING_KEY` secret and in an offline
+backup; its public half is `keys/khatm.rsa.pub`.
+
+- **Protection:** GitHub encrypts the secret and exposes it only to workflow runs of this repository
+  (not to pull requests from forks); `build.yml` checks it against the committed public key and
+  deletes it from the runner after signing. Keep the backup in a password manager or vault, never on
+  a laptop disk.
+- **Rotation (yearly, or at once if the key may have leaked):**
+  1. Generate a new key: `melange keygen khatm-<year>.rsa`.
+  2. Commit the new public key under `keys/`, keep the old one, and set the new private key as
+     `MELANGE_SIGNING_KEY`; update `name=` in `build.yml` to the new file name.
+  3. Bump the epoch and release: the new version is signed with the new key.
+  4. Tell users to add the new public key; remove the old one from `keys/` after the five kept
+     versions have rolled over.
+
+## Branch rules
+
+Changes reach `main` through pull requests, so the `PR` checks run first. Pushing directly to `main`
+skips them, as happened with the merge conflict in 7e4ecb7; with the ruleset active, only
+repository admins can push directly, and they should not.

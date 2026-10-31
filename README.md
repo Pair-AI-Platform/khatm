@@ -156,7 +156,11 @@ Only the **five newest versions** exist at any time, and every tag that exists i
   their platform manifests and referrers; older versions, and anything untagged or orphaned, are
   deleted ([ghcr-cleanup-action](https://github.com/dataaxiom/ghcr-cleanup-action)). Only release
   tags are counted, so `latest` and the `sha256-…` referrer tags never push a version out. The
-  GitHub releases and git tags follow the same rule.
+  GitHub releases and git tags follow the same rule. A version is published only when the packages
+  change (a Renovate update or a manual change), so five versions usually cover a long period.
+- **The evidence outlives the version.** The [CHANGELOG](CHANGELOG.md) keeps every version's
+  changes in git, and the Sigstore transparency log (Rekor) permanently records every signature and
+  attestation. To keep old versions themselves, mirror them with their referrers (`oras cp -r`).
 - **[CHANGELOG.md](CHANGELOG.md)** has an entry for every version, listing each package that
   changed (from → to). The GitHub release of the tag carries the same notes.
 
@@ -224,10 +228,12 @@ policy exactly.
   loads.
 - **Tested operational environments.** The security policy (Table 3) lists Ubuntu 22.04 and
   Debian 11 (Intel i7-8550U), FreeBSD 13.1 and Windows 10 (Intel i7-10510U), and macOS 11 on Intel
-  and on Apple M1. None is vendor affirmed. Running the module on
-  Wolfi is a port to an untested operational environment under FIPS 140-3 Implementation Guidance
-  2.3.A: the operator affirms that the module is used unchanged. That applies to `x86_64`, and more
-  strongly to `aarch64`, because Linux on ARM is not among the tested environments.
+  and on Apple M1, and states "No operational environments are vendor affirmed". Running the
+  module on Wolfi is therefore a port to an operational environment that was not tested. The CMVP
+  allows porting a Level 1 software module like this one (FIPS 140-3 Management Manual, Section
+  7.9), but makes no statement about its correct operation there; the operator affirms that the
+  module is used unchanged. That applies to `x86_64`, and more strongly to `aarch64`, because Linux
+  on ARM is not among the tested environments.
 - **Status.** #4985 is a FIPS 140-3 certificate: Active, sunset date 10 March 2030, overall
   Level 1, caveat "When operated in approved mode". It is the only active certificate of the
   OpenSSL Project: the FIPS 140-2 certificates of the 3.0 providers (#4282, #4811) moved to the
@@ -304,7 +310,7 @@ They have to be handled by the application, the CA or the operator:
 | NCS ADVANCED level, and hardware key storage | NCS-1 §6.1 does not accept software modules at ADVANCED; CCC-2:2024 and DCC-1:2022 (Secret, Top Secret) require ADVANCED; QNCS VIII.6.1.1 and NIA CY 7 require HSMs. This is a software module (Level 1) | Keep keys in an HSM validated to FIPS 140-2/140-3 Level 3 |
 | Post-quantum algorithms (ML-KEM, ML-DSA) | Provider 3.1.2 has none; no validated OpenSSL provider with them exists yet | Plan migration with the next certified provider |
 | `fipsmodule.cnf` and the module itself | The security policy (§11.1) forbids changing them; a change would leave the validated module | Never edit them; update only when NIST lists a new certificate |
-| Wolfi as an operational environment | The certificate lists other environments; Wolfi and aarch64 are an operator-affirmed port (IG 2.3.A) | Documented in [What the certificate covers](#what-the-certificate-covers) |
+| Wolfi as an operational environment | The certificate lists other environments; Wolfi and aarch64 are a port affirmed by the operator (CMVP Management Manual, Section 7.9) | Documented in [What the certificate covers](#what-the-certificate-covers) |
 | An application that loads another provider (for example `legacy`) on purpose | OpenSSL lets programs load providers explicitly, and Wolfi's libcrypto installs `legacy.so` as a dependency | Review applications; the configuration never loads it |
 | Key management, dual control, rotation | Processes, not software (CORF §5.7.1.2, §5.7.1.5, §5.7.1.6; ECC 2-8-3-2; IA T7.4.2) | Operator procedures and an HSM or KMS |
 
