@@ -17,3 +17,7 @@ notes.md
 .idea/
 .DS_Store
 *.swp
+
+# Python
+__pycache__/
+*.pyc
