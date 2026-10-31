@@ -12,7 +12,7 @@ package:
   version: "3.1.2"
   # Every release gets a new epoch, so a published version (3.1.2-r<epoch>) is never rebuilt or
   # overwritten. Renovate bumps it with scripts/bump-epoch.sh; bump it by hand for manual changes.
-  epoch: 1
+  epoch: 2
   description: "OpenSSL FIPS Provider 3.1.2, FIPS 140-3 validated module (CMVP certificate #4985)"
   url: https://github.com/Pair-AI-Platform/khatm
   copyright:
